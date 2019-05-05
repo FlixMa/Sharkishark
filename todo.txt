@@ -1,0 +1,3 @@
+- client bekommt keinen zweiten move request?
+- auf </protocol> achten und client beenden
+- parser soll ausdrucken, wenn er daten erhält, mit denen er nichts anfangen kann...

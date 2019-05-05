@@ -42,12 +42,8 @@ def main():
     gameClient.start()
     time.sleep(0.5)
     gameClient.join()
-
     
-    
-    
-    
-    time.sleep(5)
+    time.sleep(15)
     gameClient.stop()
     
     
