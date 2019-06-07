@@ -40,5 +40,8 @@ class GameClient(AsynchronousSocketClient):
         #let hints = move.debugHints.reduce(into: "") { $0 += "<hint content=\"\($1)\" />" }
         #let mv = "<data class=\"move\" x=\"\(move.x)\" y=\"\(move.y)\" direction=\"\(move.direction)\">\(hints)</data>"
         #self.socket.send(message: "<room roomId=\"\(self.roomId!)\">\(mv)</room>")
-        hintsXML = ''
-        self.send('<room roomId="%s"><data class="move" x="%d" y="%d" direction="%s">%s</data></room>' % (roomId, posX, posY, directionString, hintsXML))
+        hintsXML = '<hint content="noch ein Hint" />'
+        message = '<room roomId="%s"><data class="move" x="%d" y="%d" direction="%s">%s</data></room>' % (roomId, posX, posY, directionString, hintsXML)
+        print('\nsending:', message, '\n')
+        
+        self.send(message)

@@ -27,15 +27,17 @@ class EvenSimplerGameLogicDelegate(core.logic.GameLogicDelegate):
 
             myFieldState = core.util.FieldState.fromPlayerColor(core.state.GameSettings.ourColor)
 
-            positions = np.argwhere(board == myFieldState)
+            positions = list(np.argwhere(board == myFieldState))
 
             unsortedPositions = random.sample(positions, len(positions))
 
             for position in unsortedPositions:
                 for direction in core.util.Direction:
                     proposedMove = core.util.Move(position[0], position[1], direction)
-                    if self.validateMove(proposedMove):
-                        print(proposedMove)
+
+                    valid, destination = self.validateMove(proposedMove)
+                    if valid:
+                        self.currentGameState.printColored(highlight=[(position[0], position[1]), destination])
                         return proposedMove
 
             print('all moves are invalid')
@@ -43,6 +45,12 @@ class EvenSimplerGameLogicDelegate(core.logic.GameLogicDelegate):
 
 
     def validateMove(self, move, gameState=None):
+        '''
+            Returns a tuple:
+            1. flag, if move is valid
+            2. destination (x, y) of that move or None if invalid
+        '''
+
         if not isinstance(move, core.util.Move):
             raise ValueError('move argument is not of type "core.util.Move". Given: ' + str(type(move)))
 
@@ -147,7 +155,7 @@ class EvenSimplerGameLogicDelegate(core.logic.GameLogicDelegate):
 
 
 
-'''
+
 gameLogic = EvenSimplerGameLogicDelegate()
 gameClient = core.communication.GameClient('127.0.0.1', 13050, gameLogic)
 
@@ -159,10 +167,10 @@ while not gameClient.is_stopped():
         time.sleep(100)
     except:
         gameClient.stop()
-'''
+
 #time.sleep(15)
 #gameClient.stop()
-
+'''
 state = core.state.GameState()
 
 a = np.full((10, 10), core.util.FieldState.EMPTY)
@@ -198,7 +206,7 @@ for dir in core.util.Direction:
     state.printColored(highlight=[destination])
 
     print('\n' + '- ' * 10 + '\n')
-
+'''
 
 
 

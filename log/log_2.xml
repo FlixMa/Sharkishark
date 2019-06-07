@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<room roomId="e53265b1-8f66-4a04-bf04-c45de4894112">
+ <data class="result">
+  <definition>
+   <fragment name="Gewinner">
+    <aggregation>
+     SUM
+    </aggregation>
+    <relevantForRanking>
+     true
+    </relevantForRanking>
+   </fragment>
+   <fragment name="∅ Schwarm">
+    <aggregation>
+     AVERAGE
+    </aggregation>
+    <relevantForRanking>
+     true
+    </relevantForRanking>
+   </fragment>
+  </definition>
+  <score cause="HARD_TIMEOUT" reason="Der Spieler hat innerhalb von 10 Sekunden nach Aufforderung keinen Zug gesendet">
+   <part>
+    0
+   </part>
+   <part>
+    8
+   </part>
+  </score>
+  <score cause="REGULAR">
+   <part>
+    2
+   </part>
+   <part>
+    8
+   </part>
+  </score>
+  <winner color="BLUE" displayName="Unknown"/>
+ </data>
+</room>
