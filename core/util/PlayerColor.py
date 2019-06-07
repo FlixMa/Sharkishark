@@ -4,6 +4,12 @@ class PlayerColor(Enum):
     RED = 1
     BLUE = 2
 
+    def otherColor(self):
+        if self == PlayerColor.RED:
+            return PlayerColor.BLUE
+        else:
+            return PlayerColor.RED
+
     @classmethod
     def fromString(cls, playerColorString):
         if not isinstance(playerColorString, str):
