@@ -125,6 +125,7 @@ class Parser():
             return False
 
         if gameState.board is None:
+            # TODO: remove hardcoded board size
             gameState.board = np.zeros((10, 10), dtype=FieldState)
 
         for field in boardTag.find_all('field'):

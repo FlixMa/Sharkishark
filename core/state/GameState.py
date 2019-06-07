@@ -1,3 +1,5 @@
+import core
+
 class GameState():
     def __init__(self):
         self.currentPlayerColor = None
@@ -32,7 +34,7 @@ class GameState():
 
         raise ValueError('other is not of type GameState. Given: %s' % type(other))
 
-    def __str__(self):
+    def __str__(self, colored=False, highlight=[]):
         stringRepresentation = 'GameState(\n' + ' ' * 4
         stringRepresentation += 'currentPlayerColor: ' + str(self.currentPlayerColor) + '\n' + ' ' * 4
         stringRepresentation += 'turn: ' + str(self.turn) + '\n' + ' ' * 4
@@ -42,12 +44,40 @@ class GameState():
             stringRepresentation += ' ' + str(None) + '\n'
         else:
             printing = self.board.T
-            for idx in range(len(printing)-1, -1, -1):
-                row = printing[idx]
+            for y in range(len(printing)-1, -1, -1):
+                row = printing[y]
                 stringRepresentation += '\n' + ' ' * 8
-                for item in row:
-                    stringRepresentation += str(item.value).rjust(2)
+                for x, item in enumerate(row):
+                    temp = str(item.value)
+
+                    if colored:
+                        if (x,y) in highlight:
+                            temp = TerminalColor.BG_GREEN.wrap(temp)
+                        elif item == core.util.FieldState.RED:
+                            temp = TerminalColor.RED.wrap(temp)
+                        elif item == core.util.FieldState.BLUE:
+                            temp = TerminalColor.CYAN.wrap(temp)
+                        elif item == core.util.FieldState.OBSTRUCTED:
+                            temp = TerminalColor.GREEN.wrap(temp)
+
+                    stringRepresentation += ' ' + temp
+
             stringRepresentation += '\n'
 
         stringRepresentation += ')'
         return stringRepresentation
+
+    def printColored(self, highlight=[]):
+        print(self.__str__(colored=True, highlight=highlight))
+
+from enum import Enum
+
+class TerminalColor(Enum):
+    RESET = "\033[0;0m"
+    RED   = "\033[1;31m"
+    BLUE  = "\033[1;34m"
+    CYAN  = "\033[1;36m"
+    GREEN = "\033[0;32m"
+    BG_GREEN = "\033[0;103m"
+    def wrap(self, text):
+        return self.value + str(text) + TerminalColor.RESET.value
