@@ -43,6 +43,9 @@ class StoppableThread(threading.Thread):
     def is_stopped(self):
         return self._stop_event.is_set()
 
+    def wait_until_stopped(self):
+        self._stop_event.wait()
+
 
 
 class AsynchronousSocketClient(StoppableThread):

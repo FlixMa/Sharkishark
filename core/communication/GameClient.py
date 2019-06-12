@@ -32,7 +32,7 @@ class GameClient(AsynchronousSocketClient):
         if reservationCode is None:
             self.send('<protocol><join gameType="swc_2019_piranhas"/>')
         else:
-            raise NotImplementedError('Joining a game through reservation code is not yet supported. (RC: %s)' % reservationCode)
+            self.send('<protocol><joinPrepared reservationCode="%s"/>' % reservationCode)
 
 
     def move(self, roomId, posX, posY, directionString):
@@ -43,5 +43,5 @@ class GameClient(AsynchronousSocketClient):
         hintsXML = '<hint content="noch ein Hint" />'
         message = '<room roomId="%s"><data class="move" x="%d" y="%d" direction="%s">%s</data></room>' % (roomId, posX, posY, directionString, hintsXML)
         print('\nsending:', message, '\n')
-        
+
         self.send(message)

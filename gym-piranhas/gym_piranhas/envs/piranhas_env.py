@@ -102,7 +102,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         '''
         Abfolge:
-        
+
             1. aktuellen game state auslesen
                 1.1. game state normalisieren (z.b. spielfeld drehen wenn wir nicht blau sind)
             2. prediction machen (unser nn)
@@ -111,7 +111,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             4. zug an den server senden
             5. auf gegner (neues board) warten
             6. reward berechnen
-        
+
             -> bei 1 weitermachen
         '''
 
@@ -137,7 +137,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         # calculate reward
         reward, legal_move = self.calc_reward(previous_game_state)
 
-        return self.observation, reward, not legal_move  # TODO check if game ended
+        return (self.observation, reward, not legal_move, {})  # TODO check if game ended
 
     def reset(self):
         """
@@ -200,11 +200,18 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         # preprocessing
         self.observation["board"] = np.zeros((10, 10, 3))  # (us, opponent, kraken)
-        self.observation["board"][:][:][0] = np.isin(
-            self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor))
+        self.observation["board"][:][:][0] = np.isin( # TODO: sollte das nicht einfach nur ein vergleich sein
+            self.currentGameState.board,              # -> = (self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor))
+            FieldState.fromPlayerColor(GameSettings.ourColor)
+        )
         self.observation["board"][:][:][1] = np.isin(
-            self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor))
-        self.observation["board"][:][:][2] = np.isin(self.currentGameState.board == FieldState.OBSTRUCTED)
+            self.currentGameState.board,
+            FieldState.fromPlayerColor(GameSettings.ourColor.otherColor)
+        )
+        self.observation["board"][:][:][2] = np.isin(
+            self.currentGameState.board,
+            FieldState.OBSTRUCTED
+        )
 
         if GameSettings.ourColor != GameSettings.startPlayerColor:
             # we normalize the board so that we are always the starting player
@@ -246,8 +253,17 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         mean_distance = 0
         for fish in fishes:
-            mean_distance += PiranhasEnv.norm(mean_coordinate, fish)
+            mean_distance += PiranhasEnv.norm(mean_coordinate - fish)
         return mean_distance / len(fishes)
+
+    @staticmethod
+    def calc_mean_distance_using_median_center(fishes):
+        median_coordinate = np.median(fishes, axis=0)
+
+        squared_error = 0
+        for fish_coord in fishes:
+            squared_error += np.square(median_coordinate - fish_coord).sum()
+        return squared_error / len(fishes)
 
     @staticmethod
     def get_biggest_group(fishes):
@@ -277,6 +293,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         mean_distance_previous = PiranhasEnv.calc_mean_distance(own_fishes_previous)
         mean_distance_current = PiranhasEnv.calc_mean_distance(own_fishes_current)
+        #TODO: use calc_mean_distance_using_median_center?
 
         # biggest_group_previous = PiranhasEnv.get_biggest_group(own_fishes_previous)
         # biggest_group_current = PiranhasEnv.get_biggest_group(own_fishes_current)
@@ -288,7 +305,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         valid_move = self.validateMove(self.global_move)
         valid_move_reward = 0
         if not valid_move:
-            valid_move_reward = -10
+            valid_move_reward = -1000
 
         return (mean_distance_previous - mean_distance_current) + \
                reward_fish_eaten + valid_move_reward, valid_move

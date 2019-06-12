@@ -196,17 +196,17 @@ for dir in core.util.Direction:
 
 def main(host='127.0.0.1', port=13050):
 
-    gameLogic = EvenSimplerGameLogicDelegate()
-    gameClient = core.communication.GameClient(host, port, gameLogic)
+    game_logic = EvenSimplerGameLogicDelegate()
+    game_client = core.communication.GameClient(host, port, game_logic)
 
-    gameClient.start()
-    gameClient.join()
+    game_client.start() # connect to the server
+    game_client.join() # join a game
 
-    while not gameClient.is_stopped():
-        try:
-            time.sleep(100)
-        except:
-            gameClient.stop()
+    try:
+        game_client.wait_until_stopped()
+    except:
+        game_client.stop()
+
 
 if __name__ == '__main__':
     main()
