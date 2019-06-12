@@ -14,7 +14,7 @@ class GameLogicDelegate():
 
     def onGameStateUpdate(self, gameState):
         print('-> onGameStateUpdate()')
-        print(gameState)
+        gameState.printColored()
 
     def onMoveRequest(self):
         print('-> onMoveRequest()')

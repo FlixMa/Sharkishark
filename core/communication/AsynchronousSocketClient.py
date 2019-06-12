@@ -55,9 +55,9 @@ class AsynchronousSocketClient(StoppableThread):
                     message = receive(self.sock)
                     if message != '':
                         self.onMessage(message)
-                except socket.error:
+                except socket.error as ex:
                     self.stop()
-                    print("remote peer closed the socket!")
+                    print("remote peer closed the socket:", ex)
                 except Exception as ex:
                     print(ex)
                     raise ex
