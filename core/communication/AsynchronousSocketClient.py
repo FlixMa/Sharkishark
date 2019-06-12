@@ -1,7 +1,8 @@
 import socket
 import threading
+from datetime import datetime
 
-def receive(sock):
+def receive(sock, debug=False):
     data = bytearray()
     try:
         while 1:
@@ -14,7 +15,12 @@ def receive(sock):
                     break
             data.append(b[0])
     except socket.timeout:
-        pass
+        if debug and message != '':
+            message = bytes(data).decode('utf-8')
+            with open('./log/socket.txt', 'a') as socketLogFile:
+                socketLogFile.write(datetime.now().isoformat() + '\n')
+                socketLogFile.write(message)
+                socketLogFile.write('\n\n')
     except Exception as ex:
         print('exception in receive: ', repr(ex))
         print('data on exception:', repr(bytes(data).decode('utf-8')))

@@ -154,20 +154,6 @@ class EvenSimplerGameLogicDelegate(core.logic.GameLogicDelegate):
 
 
 
-
-
-gameLogic = EvenSimplerGameLogicDelegate()
-gameClient = core.communication.GameClient('127.0.0.1', 13050, gameLogic)
-
-gameClient.start()
-gameClient.join()
-
-while not gameClient.is_stopped():
-    try:
-        time.sleep(100)
-    except:
-        gameClient.stop()
-
 #time.sleep(15)
 #gameClient.stop()
 '''
@@ -208,6 +194,19 @@ for dir in core.util.Direction:
     print('\n' + '- ' * 10 + '\n')
 '''
 
+def main(host='127.0.0.1', port=13050):
 
+    gameLogic = EvenSimplerGameLogicDelegate()
+    gameClient = core.communication.GameClient(host, port, gameLogic)
 
-#
+    gameClient.start()
+    gameClient.join()
+
+    while not gameClient.is_stopped():
+        try:
+            time.sleep(100)
+        except:
+            gameClient.stop()
+
+if __name__ == '__main__':
+    main()

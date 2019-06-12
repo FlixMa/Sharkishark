@@ -11,15 +11,20 @@ class Parser():
     @staticmethod
     def parse(xml_string, lastGameState=None, debug=False):
         global LOG_COUNT
-        
+
         if type(xml_string) is not str:
             return False
 
-        soup = BeautifulSoup(xml_string, 'xml')
+        if debug:
+            with open('./log/log_%d_raw.xml' % LOG_COUNT, 'w') as logfile:
+                logfile.write(xml_string)
 
-        with open('./log/log_%d.xml' % LOG_COUNT, 'w') as logfile:
-            logfile.write(soup.prettify())
-            LOG_COUNT += 1
+        soup = BeautifulSoup('<root>' + xml_string + '</root>', 'xml')
+
+        if debug:
+            with open('./log/log_%d_prettified.xml' % LOG_COUNT, 'w') as logfile:
+                logfile.write(soup.prettify())
+                LOG_COUNT += 1
 
         settingsChanged = False
         gameStateResult = (False, lastGameState)

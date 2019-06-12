@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+ <room roomId="73fdde94-c812-4ac3-814d-8c5104faf336">
+  <data class="memento">
+   <state class="sc.plugin2019.GameState" currentPlayerColor="BLUE" startPlayerColor="RED" turn="53">
+    <lastMove class="move" direction="DOWN" x="8" y="6">
+     <hint content="noch ein Hint"/>
+    </lastMove>
+    <red color="RED" displayName="Unknown"/>
+    <blue color="BLUE" displayName="Unknown"/>
+    <board>
+     <fields>
+      <field state="EMPTY" x="0" y="0"/>
+      <field state="EMPTY" x="0" y="1"/>
+      <field state="EMPTY" x="0" y="2"/>
+      <field state="EMPTY" x="0" y="3"/>
+      <field state="EMPTY" x="0" y="4"/>
+      <field state="EMPTY" x="0" y="5"/>
+      <field state="EMPTY" x="0" y="6"/>
+      <field state="RED" x="0" y="7"/>
+      <field state="EMPTY" x="0" y="8"/>
+      <field state="RED" x="0" y="9"/>
+     </fields>
+     <fields>
+      <field state="EMPTY" x="1" y="0"/>
+      <field state="EMPTY" x="1" y="1"/>
+      <field state="EMPTY" x="1" y="2"/>
+      <field state="EMPTY" x="1" y="3"/>
+      <field state="EMPTY" x="1" y="4"/>
+      <field state="RED" x="1" y="5"/>
+      <field state="EMPTY" x="1" y="6"/>
+      <field state="EMPTY" x="1" y="7"/>
+      <field state="EMPTY" x="1" y="8"/>
+      <field state="EMPTY" x="1" y="9"/>
+     </fields>
+     <fields>
+      <field state="EMPTY" x="2" y="0"/>
+      <field state="EMPTY" x="2" y="1"/>
+      <field state="OBSTRUCTED" x="2" y="2"/>
+      <field state="EMPTY" x="2" y="3"/>
+      <field state="EMPTY" x="2" y="4"/>
+      <field state="EMPTY" x="2" y="5"/>
+      <field state="EMPTY" x="2" y="6"/>
+      <field state="EMPTY" x="2" y="7"/>
+      <field state="EMPTY" x="2" y="8"/>
+      <field state="BLUE" x="2" y="9"/>
+     </fields>
+     <fields>
+      <field state="EMPTY" x="3" y="0"/>
+      <field state="EMPTY" x="3" y="1"/>
+      <field state="EMPTY" x="3" y="2"/>
+      <field state="BLUE" x="3" y="3"/>
+      <field state="EMPTY" x="3" y="4"/>
+      <field state="EMPTY" x="3" y="5"/>
+      <field state="EMPTY" x="3" y="6"/>
+      <field state="EMPTY" x="3" y="7"/>
+      <field state="EMPTY" x="3" y="8"/>
+      <field state="EMPTY" x="3" y="9"/>
+     </fields>
+     <fields>
+      <field state="EMPTY" x="4" y="0"/>
+      <field state="EMPTY" x="4" y="1"/>
+      <field state="EMPTY" x="4" y="2"/>
+      <field state="EMPTY" x="4" y="3"/>
+      <field state="BLUE" x="4" y="4"/>
+      <field state="EMPTY" x="4" y="5"/>
+      <field state="OBSTRUCTED" x="4" y="6"/>
+      <field state="BLUE" x="4" y="7"/>
+      <field state="EMPTY" x="4" y="8"/>
+      <field state="EMPTY" x="4" y="9"/>
+     </fields>
+     <fields>
+      <field state="BLUE" x="5" y="0"/>
+      <field state="EMPTY" x="5" y="1"/>
+      <field state="EMPTY" x="5" y="2"/>
+      <field state="EMPTY" x="5" y="3"/>
+      <field state="EMPTY" x="5" y="4"/>
+      <field state="RED" x="5" y="5"/>
+      <field state="EMPTY" x="5" y="6"/>
+      <field state="EMPTY" x="5" y="7"/>
+      <field state="RED" x="5" y="8"/>
+      <field state="EMPTY" x="5" y="9"/>
+     </fields>
+     <fields>
+      <field state="EMPTY" x="6" y="0"/>
+      <field state="EMPTY" x="6" y="1"/>
+      <field state="BLUE" x="6" y="2"/>
+      <field state="EMPTY" x="6" y="3"/>
+      <field state="EMPTY" x="6" y="4"/>
+      <field state="EMPTY" x="6" y="5"/>
+      <field state="EMPTY" x="6" y="6"/>
+      <field state="EMPTY" x="6" y="7"/>
+      <field state="BLUE" x="6" y="8"/>
+      <field state="BLUE" x="6" y="9"/>
+     </fields>
+     <fields>
+      <field state="EMPTY" x="7" y="0"/>
+      <field state="EMPTY" x="7" y="1"/>
+      <field state="EMPTY" x="7" y="2"/>
+      <field state="RED" x="7" y="3"/>
+      <field state="BLUE" x="7" y="4"/>
+      <field state="EMPTY" x="7" y="5"/>
+      <field state="RED" x="7" y="6"/>
+      <field state="BLUE" x="7" y="7"/>
+      <field state="BLUE" x="7" y="8"/>
+      <field state="EMPTY" x="7" y="9"/>
+     </fields>
+     <fields>
+      <field state="BLUE" x="8" y="0"/>
+      <field state="RED" x="8" y="1"/>
+      <field state="RED" x="8" y="2"/>
+      <field state="EMPTY" x="8" y="3"/>
+      <field state="EMPTY" x="8" y="4"/>
+      <field state="RED" x="8" y="5"/>
+      <field state="EMPTY" x="8" y="6"/>
+      <field state="EMPTY" x="8" y="7"/>
+      <field state="BLUE" x="8" y="8"/>
+      <field state="EMPTY" x="8" y="9"/>
+     </fields>
+     <fields>
+      <field state="EMPTY" x="9" y="0"/>
+      <field state="EMPTY" x="9" y="1"/>
+      <field state="EMPTY" x="9" y="2"/>
+      <field state="RED" x="9" y="3"/>
+      <field state="EMPTY" x="9" y="4"/>
+      <field state="EMPTY" x="9" y="5"/>
+      <field state="EMPTY" x="9" y="6"/>
+      <field state="RED" x="9" y="7"/>
+      <field state="RED" x="9" y="8"/>
+      <field state="EMPTY" x="9" y="9"/>
+     </fields>
+    </board>
+   </state>
+  </data>
+ </room>
+ <room roomId="73fdde94-c812-4ac3-814d-8c5104faf336">
+  <data class="sc.framework.plugins.protocol.MoveRequest"/>
+ </room>
+</root>
