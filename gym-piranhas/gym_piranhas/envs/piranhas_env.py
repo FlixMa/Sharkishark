@@ -36,16 +36,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             "begins": spaces.Discrete(1)
         }),
         self.observation = {
-            "board": [[0,1,1,1,1,1,1,1,1,0],
-                      [2,0,0,0,0,0,0,0,0,2],
-                      [2,0,0,0,0,0,0,0,0,2],
-                      [2,0,0,3,0,0,0,0,0,2],
-                      [2,0,0,0,0,0,0,0,0,2],
-                      [2,0,0,0,0,0,0,0,0,2],
-                      [2,0,0,0,0,0,0,0,0,2],
-                      [2,0,0,0,0,0,0,3,0,2],
-                      [2,0,0,0,0,0,0,0,0,2],
-                      [0,1,1,1,1,1,1,1,1,0]],
+            "board": np.zeros((10, 10, 3)),
             "opponent": {
                 "nr_fish": 16,
                 "biggest_group": 8,
@@ -57,7 +48,6 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             "turn_nr": 0,
             "begins": 0
         }
-        # self.dqn = None  # to be set?
 
         # members from GameLogicDelegate
         super(GameLogicDelegate).__init__()
@@ -92,7 +82,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         to reset this environment's state.
         Accepts an action and returns a tuple (observation, reward, done, info).
         Args:
-             action (object): an action provided by the agent
+             action (spaces.Tuple): an action provided by the agent
          Returns:
             observation (object): agent's observation of the current environment
             reward (float) : amount of reward returned after previous action
@@ -124,7 +114,10 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.move_request_event.clear()
 
         # send move request (somehow)
-        self.global_move = Move(action[0], action[1], Direction(action[2]))
+        if GameSettings.ourColor != GameSettings.startPlayerColor:
+            self.global_move = Move(action[0], action[1], Direction(action[2]))
+        else:
+            self.global_move = Move(action[0], action[1], Direction(action[2]))
         # self.global_move = self.move()  # this is nn.forward(observation) --> TODO richtig so?
         previous_game_state = self.currentGameState  # remember the last game state
         self.move_decision_taken_event.set()  # onMoveRequest listens for this event
@@ -150,6 +143,8 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.game_state_update_event.clear()
         self.observation["begins"] = GameSettings.startPlayerColor
         # TODO flag für Spiel zuende
+
+        return self.observation
 
     def render(self, mode='human', close=False):
         """
@@ -200,18 +195,12 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         # preprocessing
         self.observation["board"] = np.zeros((10, 10, 3))  # (us, opponent, kraken)
-        self.observation["board"][:][:][0] = np.isin( # TODO: sollte das nicht einfach nur ein vergleich sein
-            self.currentGameState.board,              # -> = (self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor))
-            FieldState.fromPlayerColor(GameSettings.ourColor)
-        )
-        self.observation["board"][:][:][1] = np.isin(
-            self.currentGameState.board,
-            FieldState.fromPlayerColor(GameSettings.ourColor.otherColor)
-        )
-        self.observation["board"][:][:][2] = np.isin(
-            self.currentGameState.board,
-            FieldState.OBSTRUCTED
-        )
+        print(self.observation["board"].shape, self.currentGameState.board.shape)
+        self.observation["board"][:, :, 0] = self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor)
+        self.observation["board"][:, :, 1] = self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor)
+        self.observation["board"][:, :, 2] = self.currentGameState.board == FieldState.OBSTRUCTED
+
+        print(self.observation["board"].shape, self.currentGameState.board.shape)
 
         if GameSettings.ourColor != GameSettings.startPlayerColor:
             # we normalize the board so that we are always the starting player
@@ -240,8 +229,8 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
     # Helper methods
     @staticmethod
-    def norm(a, b):
-        return sqrt(a ** 2 + b ** 2)
+    def norm(a):
+        return sqrt(a[0] ** 2 + a[1] ** 2)
 
     @staticmethod
     def calc_mean_distance(fishes):
@@ -291,8 +280,8 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         opp_fishes_current = np.argwhere(
             self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor))
 
-        mean_distance_previous = PiranhasEnv.calc_mean_distance(own_fishes_previous)
-        mean_distance_current = PiranhasEnv.calc_mean_distance(own_fishes_current)
+        mean_distance_previous = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_previous)
+        mean_distance_current = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_current)
         #TODO: use calc_mean_distance_using_median_center?
 
         # biggest_group_previous = PiranhasEnv.get_biggest_group(own_fishes_previous)
