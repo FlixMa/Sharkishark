@@ -56,6 +56,9 @@ class Parser():
                 moveRequestIssued = True
             elif cls == 'result':
                 gameResult = Parser.parseResult(roomElem.data)
+            elif cls == 'error':
+                if gameResult is None:
+                    gameResult = Parser.parseError(roomElem.data)
             else:
                 print('Parser found room element with unknown content:')
                 print(roomElem.prettify())
@@ -66,7 +69,7 @@ class Parser():
             print(soup.prettify())
             print('-'*50)
 
-        return settingsChanged, gameStateResult, moveRequestIssued, gameResult
+        return settingsChanged, gameStateResult, moveRequestIssued, gameResult, gameError
 
     @staticmethod
     def parseRoomId(soup):
@@ -192,10 +195,11 @@ class Parser():
 
         weWon = GameSettings.ourColor == winningPlayer
 
-        scores = []
+        ourScore = None
+        theirScore = None
 
         for score in data.find_all('score'):
-            causeString = score.get('cause')
+            cause = GameResultCause.fromString(score.get('cause'))
             reasonString = score.get('reason')
             playerResult = None
             playerPoints = None
@@ -211,30 +215,26 @@ class Parser():
                 elif i == 1: # count
                     playerPoints = content
 
-            scores.append((causeString, reasonString, playerResult, playerPoints))
+            playerResult = GameResult.fromInt(playerResult)
 
+            parsedScore = (cause, reasonString, playerResult, playerPoints)
+            if (weWon and playerResult == GameResult.WON) or (not weWon and GameResult.LOST):
+                ourScore = parsedScore
+            else:
+                theirScore = parsedScore
 
-        gameResult = None
-        gameResultCause = None
-        gameResultReason = None
-
-        for (type, reasonString, playerResult, _) in scores:
-            if playerResult == 1: # tied
-                gameResult, gameResultCause, gameResultReason = (GameResult.TIED, GameResultCause.REGULAR, None)
-            elif playerResult == 2 and weWon: # won
-                gameResult, gameResultCause, gameResultReason = (GameResult.WON, GameResultCause.fromString(type), reasonString)
-            elif playerResult == 0 and not weWon: # lost
-                gameResult, gameResultCause, gameResultReason = (GameResult.LOST, GameResultCause.fromString(type), reasonString)
+        gameResultCause     = theirScore[0] if weWon else ourScore[0]
+        gameResultReason    = theirScore[1] if weWon else ourScore[1]
+        gameResult          = ourScore[2]
 
         if gameResult is None and gameResultCause is None and gameResultReason is None:
             return None
 
-
-
         return (gameResult, gameResultCause, gameResultReason)
 
-
-
+    @staticmethod
+    def parseError(data):
+        return (GameResult.LOST, GameResultCause.RULE_VIOLATION, data.get('message'))
 
 
 
