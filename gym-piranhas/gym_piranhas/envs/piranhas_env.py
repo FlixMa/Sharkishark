@@ -379,5 +379,5 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             opp_fishes_previous, opp_fishes_current)
 
         return (mean_distance_previous - mean_distance_current) + \
-               (biggest_group_current - biggest_group_previous) + \
+               (len(biggest_group_current) - len(biggest_group_previous)) + \
                reward_fish_eaten, self.result is not None
