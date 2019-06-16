@@ -15,7 +15,7 @@ def main():
 
     args = parser.parse_args()
 
-    with open('/Users/Felix/Documents/Entwickler/PWB_2019/reinforcement_learning/log/args.txt', 'w') as file:
+    with open('args.txt', 'w') as file:
         file.write("sys.argv: %s\n" % sys.argv)
 
         file.write("\n\n parser:\n")
