@@ -13,7 +13,7 @@ class GameClient(AsynchronousSocketClient):
         if not isinstance(self.gameLogicDelegate, GameLogicDelegate):
             return
 
-        settingsChanged, (gameStateChanged, state), moveRequestIssued = Parser.parse(message)
+        settingsChanged, (gameStateChanged, state), moveRequestIssued, gameResult = Parser.parse(message)
 
         if settingsChanged:
             self.gameLogicDelegate.onSettingsUpdate()
@@ -25,6 +25,13 @@ class GameClient(AsynchronousSocketClient):
             result = self.gameLogicDelegate.onMoveRequest()
             if result is not None:
                 self.move(GameSettings.roomId, result.x, result.y, result.direction.value)
+
+        if gameResult:
+            result, cause, description = gameResult
+            shouldKillItself = self.gameLogicDelegate.onGameResult(result, cause, description)
+            if shouldKillItself:
+                self.send('</protocol>')
+                self.stop()
 
     def join(self, reservationCode=None):
         # The join method is intentionally overidden. We don't want anybody to intercept the receiving thread.

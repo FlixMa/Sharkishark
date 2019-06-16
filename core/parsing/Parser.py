@@ -29,7 +29,7 @@ class Parser():
         settingsChanged = False
         gameStateResult = (False, lastGameState)
         moveRequestIssued = False
-
+        gameResult = None
 
         settingsChanged = Parser.parseRoomId(soup) or settingsChanged
 
@@ -54,6 +54,8 @@ class Parser():
             #################################################
             elif cls == 'sc.framework.plugins.protocol.MoveRequest':
                 moveRequestIssued = True
+            elif cls == 'result':
+                gameResult = Parser.parseResult(roomElem.data)
             else:
                 print('Parser found room element with unknown content:')
                 print(roomElem.prettify())
@@ -64,7 +66,7 @@ class Parser():
             print(soup.prettify())
             print('-'*50)
 
-        return settingsChanged, gameStateResult, moveRequestIssued
+        return settingsChanged, gameStateResult, moveRequestIssued, gameResult
 
     @staticmethod
     def parseRoomId(soup):
@@ -170,3 +172,70 @@ class Parser():
                 print(repr(x), repr(y), repr(state))
 
         return True
+
+    @staticmethod
+    def parseResult(data):
+        if data is None:
+            return None
+
+        print('Parsing result...')
+        print(data.prettify())
+
+        winner = data.find('winner')
+        winningPlayer = None
+        if winner is not None:
+            winningPlayer = PlayerColor.fromString(winner.get('color'))
+            print('Winner:', winningPlayer)
+
+        if winningPlayer is None:
+            return (GameResult.TIED, GameResultCause.REGULAR, None)
+
+        weWon = GameSettings.ourColor == winningPlayer
+
+        scores = []
+
+        for score in data.find_all('score'):
+            type = score.get('cause')
+            description = score.get('reason')
+            playerResult = None
+            playerPoints = None
+
+            for i, part in enumerate(score.find_all('part')):
+                content = None
+                try:
+                    content = int(part.string)
+                except Exception as e:
+                    print(e)
+                if i == 0: # which player: 2 won, 1 tie, 0 lost
+                    playerResult = content
+                elif i == 1: # count
+                    playerPoints = content
+
+            scores.append((type, description, playerResult, playerPoints))
+
+
+        gameState = None
+        gameStateCause = None
+        gameStateReason = None
+
+        for (type, description, playerResult, _) in scores:
+            if playerResult == 1: # tied
+                gameState, gameStateCause, gameStateReason = (GameState.TIED, GameResultCause.REGULAR, None)
+            elif playerResult == 2 and weWon: # won
+                gameState, gameStateCause, gameStateReason = (GameResult.WON, type, description)
+            elif playerResult == 0 and not weWon: # lost
+                gameState, gameStateCause, gameStateReason = (GameResult.LOST, type, description)
+
+        if gameState is None and gameStateCause is None and gameStateReason is None:
+            return None
+
+        return (gameState, gameStateCause, gameStateReason)
+
+
+
+
+
+
+
+
+#
