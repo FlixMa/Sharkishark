@@ -19,6 +19,11 @@ class GameLogicDelegate():
     def onMoveRequest(self):
         print('-> onMoveRequest()')
 
+    def onGameResult(self, result, cause, description):
+        print('-> onGameResult()')
+        print(result, cause, '->', description)
+        return True # flag, indicating to stop the client connection
+
     def validateMove(self, move, gameState=None):
         if not isinstance(move, core.util.Move):
             raise ValueError('move argument is not of type "core.util.Move". Given: ' + str(type(move)))
