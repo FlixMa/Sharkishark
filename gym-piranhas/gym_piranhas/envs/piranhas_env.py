@@ -5,9 +5,8 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 from core.logic import GameLogicDelegate
 from core.util import FieldState, PlayerColor, Direction, Move
-from core.state import GameSettings
+from core.state import GameSettings, GameResult
 from threading import Event
-
 
 
 class PiranhasEnv(gym.Env, GameLogicDelegate):
@@ -17,37 +16,13 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         # members from gym.Env
         self.name = 'piranhas'
 
-        self.action_space = spaces.Tuple(
-            (spaces.Discrete(10), spaces.Discrete(10), spaces.Discrete(8)))
+        # full steam ahead
+        self.action_space = spaces.Discrete(800)
 
-        self.observation_space = spaces.Dict({
-            "board": spaces.Box(
+        self.observation_space = spaces.Box(
                 low=0, high=1, shape=(10, 10, 3), dtype=np.uint8
             ),
-            "opponent": spaces.Dict({
-                "nr_fish": spaces.Discrete(16),
-                "biggest_group": spaces.Discrete(16)
-            }),
-            "me": spaces.Dict({
-                "nr_fish": spaces.Discrete(16),
-                "biggest_group": spaces.Discrete(16)
-            }),
-            "turn_nr": spaces.Discrete(30),
-            "begins": spaces.Discrete(1)
-        }),
-        self.observation = {
-            "board": np.zeros((10, 10, 3)),
-            "opponent": {
-                "nr_fish": 16,
-                "biggest_group": 8,
-            },
-            "me": {
-                "nr_fish": 16,
-                "biggest_group": 8
-            },
-            "turn_nr": 0,
-            "begins": 0
-        }
+        self.observation = np.zeros((10, 10, 3))
 
         # members from GameLogicDelegate
         super(GameLogicDelegate).__init__()
@@ -55,6 +30,12 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.move_request_event = Event()
         self.move_decision_taken_event = Event()
         self.global_move = None  # of type Move()
+        self.reset_callback = None
+        self.result = None
+        self.cause = None
+
+    def set_reset_callback(self, reset_callback):
+        self.reset_callback = reset_callback
 
     # Overridden methods inherited from gym.Env
     def seed(self, seed=None):
@@ -82,7 +63,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         to reset this environment's state.
         Accepts an action and returns a tuple (observation, reward, done, info).
         Args:
-             action (spaces.Tuple): an action provided by the agent
+             action (int): an action provided by the agent
          Returns:
             observation (object): agent's observation of the current environment
             reward (float) : amount of reward returned after previous action
@@ -110,27 +91,35 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         # in the first round only (not None)
 
         # wait for move request
+        print("[env] Waiting for move request ... ")
         self.move_request_event.wait()
+        print("[env] Received move request. ")
         self.move_request_event.clear()
 
         # send move request (somehow)
+        print("[env] Calculating move ... ")
         if GameSettings.ourColor != GameSettings.startPlayerColor:
-            self.global_move = Move(action[0], action[1], Direction(action[2]))
+            self.global_move = PiranhasEnv.retrieve_move(action)
         else:
-            self.global_move = Move(action[0], action[1], Direction(action[2]))
-        # self.global_move = self.move()  # this is nn.forward(observation) --> TODO richtig so?
+            # TODO rotate the move by 90 degrees
+            self.global_move = PiranhasEnv.retrieve_move(action)
         previous_game_state = self.currentGameState  # remember the last game state
         self.move_decision_taken_event.set()  # onMoveRequest listens for this event
+        print("[env] Move decision set. ")
 
         # wait until game state has been reported
         # what the opponent did -> calc reward based on that too
+        print("[env] Waiting for game state update ... ")
         self.game_state_update_event.wait()
+        print("[env] Received game state update. ")
         self.game_state_update_event.clear()
 
         # calculate reward
-        reward, legal_move = self.calc_reward(previous_game_state)
+        print("[env] Calculating reward ... ")
+        reward, done = self.calc_reward(previous_game_state)
+        print("[env] Reward: {}; Done: {}".format(reward, done))
 
-        return (self.observation, reward, not legal_move, {})  # TODO check if game ended
+        return self.observation, reward, done, {}
 
     def reset(self):
         """
@@ -138,10 +127,18 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         Returns:
             observation (object): the initial observation.
         """
-        # TODO restart game?
+        print("[env] Resetting environment ... ")
+        self.currentGameState = None
+        self.result = None
+        self.cause = None
+        self.reset_callback()
+        print("[env] Waiting for initial game state ... ")
         self.game_state_update_event.wait()
+        print("[env] Received initial game state. ")
         self.game_state_update_event.clear()
-        self.observation["begins"] = GameSettings.startPlayerColor
+
+        # observation is no longer a dict
+        # self.observation["begins"] = GameSettings.startPlayerColor
         # TODO flag für Spiel zuende
 
         return self.observation
@@ -194,40 +191,56 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.currentGameState = game_state
 
         # preprocessing
-        self.observation["board"] = np.zeros((10, 10, 3))  # (us, opponent, kraken)
-        print(self.observation["board"].shape, self.currentGameState.board.shape)
-        self.observation["board"][:, :, 0] = self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor)
-        self.observation["board"][:, :, 1] = self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor)
-        self.observation["board"][:, :, 2] = self.currentGameState.board == FieldState.OBSTRUCTED
+        print("[env] Preprocessing ... ")
+        self.observation = np.zeros((10, 10, 3))  # (us, opponent, kraken)
 
-        print(self.observation["board"].shape, self.currentGameState.board.shape)
+        self.observation[:, :, 0] = self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor)
+        self.observation[:, :, 1] = self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor)
+        self.observation[:, :, 2] = self.currentGameState.board == FieldState.OBSTRUCTED
 
         if GameSettings.ourColor != GameSettings.startPlayerColor:
             # we normalize the board so that we are always the starting player
             # who has fishes on the left and right hand side
-            self.observation["board"] = np.rot90(self.observation["board"])
-        self.observation["board"].astype('uint8')  # saves storage in experience memory
+            self.observation = np.rot90(self.observation)
+        self.observation.astype('uint8')  # saves storage in experience memory
 
         # TODO? opponent["nr_fish"] and opponent["biggest_group"]
-        self.observation["turn_nr"] = self.currentGameState.turn
+        # self.observation["turn_nr"] = self.currentGameState.turn
 
         self.game_state_update_event.set()
+        print("[env] Preprocessing done.")
 
     def onMoveRequest(self):
         super().onMoveRequest()
         if self.currentGameState is None:
-            print('there is no field')
+            print('[env] there is no field')
             return None
         else:
             self.move_request_event.set()
             # wait until there is a move decision
+            print("[env] Waiting for a move decision ... ")
             self.move_decision_taken_event.wait()
             self.move_decision_taken_event.clear()
-            print('issuing move')
+            print('[env] issuing move {}.'.format(self.global_move))
 
             return self.global_move
 
+    def onGameResult(self, result, cause, description):
+        print("[env] Received gameResult '{}'".format(description))
+        self.result = result
+        self.cause = cause
+        # hide this as a game state
+        self.game_state_update_event.set()
+        return True
+
     # Helper methods
+    @staticmethod
+    def retrieve_move(action):
+        direction = Direction.fromInt(int(action % 8))
+        move_x = (action // 8) // 10
+        move_y = (action // 8) % 10
+        return Move(move_x, move_y, direction)
+
     @staticmethod
     def norm(a):
         return sqrt(a[0] ** 2 + a[1] ** 2)
@@ -268,6 +281,14 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
                len(opp_fishes_previous) - len(opp_fishes_current)
 
     def calc_reward(self, previous_game_state):
+        if self.result is not None and self.cause is not None:
+            reward = 0
+            if self.result == GameResult.WON:
+                reward = 10
+            elif self.result == GameResult.LOST:
+                reward = -10
+            return reward, True
+
         # compare current board to last board
         own_fishes_previous = np.argwhere(
             previous_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor))
@@ -282,7 +303,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         mean_distance_previous = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_previous)
         mean_distance_current = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_current)
-        #TODO: use calc_mean_distance_using_median_center?
+        # TODO: use calc_mean_distance_using_median_center?
 
         # biggest_group_previous = PiranhasEnv.get_biggest_group(own_fishes_previous)
         # biggest_group_current = PiranhasEnv.get_biggest_group(own_fishes_current)
@@ -291,11 +312,6 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             own_fishes_previous, own_fishes_current,
             opp_fishes_previous, opp_fishes_current)
 
-        valid_move = self.validateMove(self.global_move)
-        valid_move_reward = 0
-        if not valid_move:
-            valid_move_reward = -1000
-
         return (mean_distance_previous - mean_distance_current) + \
-               reward_fish_eaten + valid_move_reward, valid_move
+               reward_fish_eaten, False
                # (biggest_group_current - biggest_group_previous) + \

@@ -69,7 +69,7 @@ class Parser():
             print(soup.prettify())
             print('-'*50)
 
-        return settingsChanged, gameStateResult, moveRequestIssued, gameResult, gameError
+        return settingsChanged, gameStateResult, moveRequestIssued, gameResult
 
     @staticmethod
     def parseRoomId(soup):

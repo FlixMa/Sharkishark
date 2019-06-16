@@ -21,3 +21,4 @@ class Direction(Enum):
                 return dir
 
         raise ValueError('Argument is not in range of 0...7: ' + str(value))
+
