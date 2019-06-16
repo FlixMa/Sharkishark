@@ -7,9 +7,9 @@ import gym_piranhas
 import numpy as np
 
 env = gym.make('piranhas-v0')
-# TODO seed here?
+np.random.seed(12342)
+env.seed(123042)
 nb_actions = env.action_space.n
-
 
 from keras.models import Sequential
 from keras.layers import Convolution2D, Convolution3D, Flatten, Dense, Activation, Permute
@@ -19,9 +19,7 @@ import keras.backend as K
 INPUT_SHAPE = 10
 DIMENSIONS  = 3
 # WINDOW_LENGTH = 4  # The number of past states we consider
-input_shape = (INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS) # (WINDOW_LENGTH, INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)
-# output_length = env.action_space.n  # two coordinates + 1 direction
-# TODO test with 100 or more outputs (two-hot encoding)
+input_shape = (INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)  # (WINDOW_LENGTH, INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)
 
 model = Sequential()
 if K.image_data_format() == 'channels_last':
@@ -70,8 +68,8 @@ class PiranhasProcessor(Processor):
         """
         return np.squeeze(batch, axis=1)
 
-    """def process_reward(self, reward):
-        return np.clip(reward, -1., 1.)"""
+    def process_reward(self, reward):
+        return np.clip(reward, -10., 10.)
 
 # copied from https://github.com/keras-rl/keras-rl/blob/master/examples/dqn_atari.py
 # Add memory
@@ -122,16 +120,15 @@ def makeNewGame():
     game_client.join()  # join a game
 
     # start the opponent
-    """
-    Use simple client
-    """
+
+    # Use simple client
     subprocess.Popen("java -jar ../simpleclient-piranhas-19.2.1.jar --port {}".format(port),
                      stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL,
                      shell=True)
 
     """
-    Use own client
+    # Use own client
     game_client2 = core.communication.GameClient(host, port, env)
 
     game_client2.start()  # connect to the server

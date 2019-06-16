@@ -5,7 +5,7 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 from core.logic import GameLogicDelegate
 from core.util import FieldState, PlayerColor, Direction, Move
-from core.state import GameSettings, GameResult
+from core.state import GameSettings, GameResult, GameResultCause
 from threading import Event
 
 
@@ -33,6 +33,9 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.reset_callback = None
         self.result = None
         self.cause = None
+
+        # numpy random object
+        self.np_random = None
 
     def set_reset_callback(self, reset_callback):
         self.reset_callback = reset_callback
@@ -98,12 +101,12 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         # send move request (somehow)
         print("[env] Calculating move ... ")
-        if GameSettings.ourColor != GameSettings.startPlayerColor:
+        if GameSettings.ourColor == GameSettings.startPlayerColor:
             self.global_move = PiranhasEnv.retrieve_move(action)
         else:
-            # TODO rotate the move by 90 degrees
-            self.global_move = PiranhasEnv.retrieve_move(action)
-        previous_game_state = self.currentGameState  # remember the last game state
+            self.global_move = PiranhasEnv.retrieve_move(action, rotate=True)
+        # remember the last game state for reward
+        previous_game_state = self.currentGameState
         self.move_decision_taken_event.set()  # onMoveRequest listens for this event
         print("[env] Move decision set. ")
 
@@ -136,10 +139,6 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.game_state_update_event.wait()
         print("[env] Received initial game state. ")
         self.game_state_update_event.clear()
-
-        # observation is no longer a dict
-        # self.observation["begins"] = GameSettings.startPlayerColor
-        # TODO flag für Spiel zuende
 
         return self.observation
 
@@ -204,9 +203,6 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             self.observation = np.rot90(self.observation)
         self.observation.astype('uint8')  # saves storage in experience memory
 
-        # TODO? opponent["nr_fish"] and opponent["biggest_group"]
-        # self.observation["turn_nr"] = self.currentGameState.turn
-
         self.game_state_update_event.set()
         print("[env] Preprocessing done.")
 
@@ -235,10 +231,21 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
     # Helper methods
     @staticmethod
-    def retrieve_move(action):
+    def retrieve_move(action, rotate=False):
         direction = Direction.fromInt(int(action % 8))
         move_x = (action // 8) // 10
         move_y = (action // 8) % 10
+
+        if rotate:
+            # rotate clockwise; (0,0) is bottom-left
+            tmp = np.zeros((10, 10))
+            tmp[9 - move_y, move_x] = 1
+            tmp_rot = np.rot90(tmp, 3)  # numpy is counter-clockwise per default
+            coords = np.argwhere(tmp_rot)
+            move_x = int(coords[0][1])
+            move_y = 9 - int(coords[0][0])
+            direction = direction.rotate(90)
+
         return Move(move_x, move_y, direction)
 
     @staticmethod
@@ -260,7 +267,10 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
     @staticmethod
     def calc_mean_distance_using_median_center(fishes):
-        median_coordinate = np.median(fishes, axis=0)
+        median_coordinate = np.percentile(fishes,
+                                          50,
+                                          axis=0,
+                                          interpolation='nearest')
 
         squared_error = 0
         for fish_coord in fishes:
@@ -268,11 +278,65 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         return squared_error / len(fishes)
 
     @staticmethod
-    def get_biggest_group(fishes):
-        considered_fishes = []
-        unconsidered_fishes = fishes
+    def neighbors(x, y, boolBoard):
 
-        # for fish in fishes:
+        xmin = max(0, x - 1)
+        xmax = min(x + 2, boolBoard.shape[0])
+        ymin = max(0, y - 1)
+        ymax = min(y + 2, boolBoard.shape[1])
+
+        neighborhood = boolBoard[xmin:xmax, ymin:ymax]
+        # print('umfeld')
+        # print(neighborhood)
+
+        neighbors = np.argwhere(neighborhood)
+
+        neighbors += np.array([xmin, ymin])
+
+        return neighbors
+
+    @staticmethod
+    def find_groups(playerColor, board):
+        boolBoard = (board == FieldState.fromPlayerColor(playerColor))
+        fishesToConsider = np.argwhere(boolBoard)
+        groups = []
+
+        # calculate group for each starting position
+        while len(fishesToConsider) > 0:
+            fish = fishesToConsider[0]
+
+            # get neighborhood of chosen fish and iteratively do a flood-fill
+            fish_neighborhood = PiranhasEnv.neighbors(fish[0], fish[1], boolBoard)
+            i = 0
+            while i < len(fish_neighborhood):
+                neighbor = fish_neighborhood[i]
+
+                its_neighborhood = PiranhasEnv.neighbors(neighbor[0], neighbor[1], boolBoard)
+                concatenated = np.concatenate((fish_neighborhood, its_neighborhood))
+                fish_neighborhood = np.unique(concatenated, axis=0)
+                i += 1
+
+            groups.append(fish_neighborhood)
+
+            # remove all fishes in this group from the fishes to consider next round
+            remainingMask = ~(np.isin(list(map(lambda a: a[0] * 10 + a[1], fishesToConsider)),
+                                      list(map(lambda a: a[0] * 10 + a[1], fish_neighborhood))))
+            fishesToConsider = fishesToConsider[remainingMask]
+
+        return groups
+
+    @staticmethod
+    def get_biggest_group(playerColor, board):
+        groups = PiranhasEnv.find_groups(playerColor, board)
+        largestGroup = None
+        largestSize = 0
+        for group in groups:
+            size = len(group)
+            if largestSize < size:
+                largestSize = size
+                largestGroup = group
+
+        return largestGroup
 
     @staticmethod
     def get_eaten_fish_reward(own_fishes_previous, own_fishes_current,
@@ -281,13 +345,13 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
                len(opp_fishes_previous) - len(opp_fishes_current)
 
     def calc_reward(self, previous_game_state):
-        if self.result is not None and self.cause is not None:
-            reward = 0
-            if self.result == GameResult.WON:
-                reward = 10
-            elif self.result == GameResult.LOST:
-                reward = -10
-            return reward, True
+        if self.result == GameResult.WON and \
+                self.cause == GameResultCause.REGULAR:
+            return 10, True
+        elif self.result == GameResult.LOST and \
+                (self.cause == GameResultCause.REGULAR or
+                 self.cause == GameResultCause.RULE_VIOLATION):
+            return -10, True
 
         # compare current board to last board
         own_fishes_previous = np.argwhere(
@@ -297,21 +361,23 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         # opponent's fishes
         opp_fishes_previous = np.argwhere(
-            previous_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor))
+            previous_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor()))
         opp_fishes_current = np.argwhere(
-            self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor))
+            self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor()))
 
         mean_distance_previous = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_previous)
         mean_distance_current = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_current)
-        # TODO: use calc_mean_distance_using_median_center?
 
-        # biggest_group_previous = PiranhasEnv.get_biggest_group(own_fishes_previous)
-        # biggest_group_current = PiranhasEnv.get_biggest_group(own_fishes_current)
+        biggest_group_previous = PiranhasEnv.get_biggest_group(
+            GameSettings.ourColor, self.currentGameState.board)
+        biggest_group_current = PiranhasEnv.get_biggest_group(
+            GameSettings.ourColor.otherColor(), self.currentGameState.board)
 
+        # remote eaten fish
         reward_fish_eaten = PiranhasEnv.get_eaten_fish_reward(
             own_fishes_previous, own_fishes_current,
             opp_fishes_previous, opp_fishes_current)
 
         return (mean_distance_previous - mean_distance_current) + \
-               reward_fish_eaten, False
-               # (biggest_group_current - biggest_group_previous) + \
+               (biggest_group_current - biggest_group_previous) + \
+               reward_fish_eaten, self.result is not None
