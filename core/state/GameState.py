@@ -51,7 +51,7 @@ class GameState():
                     temp = str(item.value)
 
                     if colored:
-                        if (x,y) in highlight:
+                        if tuple([x, y]) in list(map(lambda a: tuple((a[0], a[1])), highlight)):
                             temp = TerminalColor.BG_GREEN.wrap(temp)
                         elif item == core.util.FieldState.RED:
                             temp = TerminalColor.RED.wrap(temp)
