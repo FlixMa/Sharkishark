@@ -40,14 +40,11 @@ class GameLogicDelegate():
 
         board = gameState.board
 
-        '''
-            check if this move is valid
-
-            1. a fish of ours is selected
-            2. the fish can move in that direction (not directly next to the bounds)
-            3. destination is empty or opponent's fish (not ours and not a kraken)
-            4. our fish does not jump over a opponent's fish
-        '''
+        # check if this move is valid
+        # 1. a fish of ours is selected
+        # 2. the fish can move in that direction (not directly next to the bounds)
+        # 3. destination is empty or opponent's fish (not ours and not a kraken)
+        # 4. our fish does not jump over a opponent's fish
 
         ourFishFieldState = core.util.FieldState.fromPlayerColor(core.state.GameSettings.ourColor)
 

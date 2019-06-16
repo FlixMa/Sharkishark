@@ -195,8 +195,8 @@ class Parser():
         scores = []
 
         for score in data.find_all('score'):
-            type = score.get('cause')
-            description = score.get('reason')
+            causeString = score.get('cause')
+            reasonString = score.get('reason')
             playerResult = None
             playerPoints = None
 
@@ -211,25 +211,27 @@ class Parser():
                 elif i == 1: # count
                     playerPoints = content
 
-            scores.append((type, description, playerResult, playerPoints))
+            scores.append((causeString, reasonString, playerResult, playerPoints))
 
 
-        gameState = None
-        gameStateCause = None
-        gameStateReason = None
+        gameResult = None
+        gameResultCause = None
+        gameResultReason = None
 
-        for (type, description, playerResult, _) in scores:
+        for (type, reasonString, playerResult, _) in scores:
             if playerResult == 1: # tied
-                gameState, gameStateCause, gameStateReason = (GameState.TIED, GameResultCause.REGULAR, None)
+                gameResult, gameResultCause, gameResultReason = (GameResult.TIED, GameResultCause.REGULAR, None)
             elif playerResult == 2 and weWon: # won
-                gameState, gameStateCause, gameStateReason = (GameResult.WON, type, description)
+                gameResult, gameResultCause, gameResultReason = (GameResult.WON, GameResultCause.fromString(type), reasonString)
             elif playerResult == 0 and not weWon: # lost
-                gameState, gameStateCause, gameStateReason = (GameResult.LOST, type, description)
+                gameResult, gameResultCause, gameResultReason = (GameResult.LOST, GameResultCause.fromString(type), reasonString)
 
-        if gameState is None and gameStateCause is None and gameStateReason is None:
+        if gameResult is None and gameResultCause is None and gameResultReason is None:
             return None
 
-        return (gameState, gameStateCause, gameStateReason)
+
+
+        return (gameResult, gameResultCause, gameResultReason)
 
 
 
