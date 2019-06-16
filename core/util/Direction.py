@@ -10,4 +10,3 @@ class Direction(Enum):
     DOWN_LEFT = 'DOWN_LEFT'
     LEFT = 'LEFT'
     UP_LEFT = 'UP_LEFT'
-        
