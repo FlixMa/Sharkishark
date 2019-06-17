@@ -5,7 +5,7 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 from core.logic import GameLogicDelegate
 from core.util import FieldState, PlayerColor, Direction, Move
-from core.state import GameSettings, GameResult, GameResultCause
+from core.state import GameSettings, GameResult, GameResultCause, GameState
 from threading import Event
 
 
@@ -105,6 +105,19 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             self.global_move = PiranhasEnv.retrieve_move(action)
         else:
             self.global_move = PiranhasEnv.retrieve_move(action, rotate=True)
+
+        # check if move is valid
+        # -> let the net redo the step action if not
+        # -> otherwise continue
+
+        if self.currentGameState is not None:
+            print("[env] Validating move locally... ")
+            valid, destination = PiranhasEnv.validate_move(self.global_move, self.currentGameState)
+            if not valid:
+                print("[env] Move is invalid. ")
+                self.move_request_event.set() # to not get stuck above
+                return self.observation, -10., self.result is not None, {'locally_validated': False}
+
         # remember the last game state for reward
         previous_game_state = self.currentGameState
         self.move_decision_taken_event.set()  # onMoveRequest listens for this event
@@ -122,7 +135,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         reward, done = self.calc_reward(previous_game_state)
         print("[env] Reward: {}; Done: {}".format(reward, done))
 
-        return self.observation, reward, done, {}
+        return self.observation, reward, done, {'locally_validated': True}
 
     def reset(self):
         """
@@ -135,10 +148,12 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.result = None
         self.cause = None
         self.reset_callback()
+        self.game_state_update_event.clear()
+        self.move_request_event.clear()
+        self.move_decision_taken_event.clear()
         print("[env] Waiting for initial game state ... ")
         self.game_state_update_event.wait()
         print("[env] Received initial game state. ")
-        self.game_state_update_event.clear()
 
         return self.observation
 
@@ -222,11 +237,13 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             return self.global_move
 
     def onGameResult(self, result, cause, description):
-        print("[env] Received gameResult '{}'".format(description))
+        print("[env] Received gameResult '({}, {})'".format(result, cause))
         self.result = result
         self.cause = cause
         # hide this as a game state
+        # # set ALL the events
         self.game_state_update_event.set()
+        self.move_request_event.set()
         return True
 
     # Helper methods
@@ -247,6 +264,115 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             direction = direction.rotate(90)
 
         return Move(move_x, move_y, direction)
+
+    @staticmethod
+    def validate_move(move, gameState=None):
+        '''
+            Returns a tuple:
+            1. flag, if move is valid
+            2. destination (x, y) of that move or None if invalid
+        '''
+
+        if not isinstance(move, Move):
+            raise ValueError('move argument is not of type "core.util.Move". Given: ' + str(type(move)))
+
+        if gameState is None:
+            raise ValueError('gameState argument is None')
+        elif not isinstance(gameState, GameState):
+            raise ValueError('gameState argument is not of type "core.state.GameState". Given: ' + str(type(gameState)))
+
+        if gameState is None:
+            raise ValueError('No gameState found.')
+        elif gameState.board is None:
+            raise ValueError('No board found.')
+
+        board = gameState.board
+
+        '''
+            check if this move is valid
+
+            1. a fish of ours is selected
+            2. the fish can move in that direction (not directly next to the bounds)
+            3. destination is empty or opponent's fish (not ours and not a kraken)
+            4. our fish does not jump over a opponent's fish
+        '''
+
+        ourFishFieldState = FieldState.fromPlayerColor(GameSettings.ourColor)
+
+        if not (board[move.x, move.y] == ourFishFieldState):
+            print('Can\'t mind control the opponents fishes :(')
+            return False, None
+
+        # count fishes in that row
+        #
+        # on which axis are we and
+        # on that axis - where are we exactly?
+        axis = None
+        current_position_on_axis = None
+        if move.direction == Direction.UP or move.direction == Direction.DOWN:
+            axis = board[move.x]
+            current_position_on_axis = move.y
+        elif move.direction == Direction.LEFT or move.direction == Direction.RIGHT:
+            axis = board[:, move.y]
+            current_position_on_axis = move.x
+        elif move.direction == Direction.DOWN_LEFT or move.direction == Direction.UP_RIGHT:
+            axis = board.diagonal(move.y - move.x)
+            current_position_on_axis = move.x if move.y > move.x else move.y
+        elif move.direction == Direction.UP_LEFT or move.direction == Direction.DOWN_RIGHT:
+            flippedX = ((board.shape[0] - 1) - move.x)
+
+            # NOTE: flipud actually flips the board left to right because of the way how we index it
+            axis = np.flipud(board).diagonal(move.y - flippedX)
+
+            current_position_on_axis = flippedX if move.y > flippedX else move.y
+
+        print('move', move.direction.name, (move.x, move.y), '-> axis: [ ', end='')
+        for item in axis:
+            print(item.name, end=' ')
+        print('], idx:', current_position_on_axis)
+
+        num_fishes = ((axis == FieldState.RED) | (axis == FieldState.BLUE)).sum()
+        print('-> fishlis:', num_fishes)
+
+        #  where do we wanna go?
+        #  NOTE: y is upside down / inverted
+        direction_forward = (move.direction in [Direction.UP, Direction.UP_LEFT, Direction.UP_RIGHT, Direction.RIGHT])
+        destination_position_on_axis = (current_position_on_axis + num_fishes) if direction_forward else (current_position_on_axis - num_fishes)
+        print('direction_forward:', direction_forward)
+        print('destination:', destination_position_on_axis)
+
+        # check for bounds
+        if destination_position_on_axis < 0 or destination_position_on_axis >= axis.size:
+            print('Exceeding bounds. %d of %d' % (destination_position_on_axis, axis.size))
+            return False, None
+
+        # what type is that destination field?
+        destinationFieldState = axis[destination_position_on_axis]
+        if destinationFieldState == FieldState.OBSTRUCTED or destinationFieldState == ourFishFieldState:
+            print('Destination is obstructed or own fish:', destinationFieldState)
+            return False, None
+
+        # is an opponents fish in between(! excluding the destiantion !)?
+        opponentsFieldState = FieldState.RED if ourFishFieldState == FieldState.BLUE else FieldState.BLUE
+        for idx in range(current_position_on_axis, destination_position_on_axis, 1 if direction_forward else -1):
+            if axis[idx] == opponentsFieldState:
+                print('Can\'t jump over opponents fish.')
+                return False, None
+
+
+        dest_x, dest_y = move.x, move.y
+        if move.direction == Direction.UP or move.direction == Direction.DOWN:
+            dest_y = destination_position_on_axis
+        elif move.direction == Direction.LEFT or move.direction == Direction.RIGHT:
+            dest_x = destination_position_on_axis
+        elif move.direction == Direction.DOWN_LEFT or move.direction == Direction.UP_RIGHT:
+            dest_x += num_fishes * (1 if direction_forward else -1)
+            dest_y += num_fishes * (1 if direction_forward else -1)
+        elif move.direction == Direction.UP_LEFT or move.direction == Direction.DOWN_RIGHT:
+            dest_x -= num_fishes * (1 if direction_forward else -1)
+            dest_y += num_fishes * (1 if direction_forward else -1)
+
+        return True, (dest_x, dest_y)
 
     @staticmethod
     def norm(a):

@@ -32,7 +32,7 @@ elif K.image_data_format() == 'channels_first':
     model.add(Permute((3, 1, 2), input_shape=input_shape))
 else:
     raise RuntimeError('Unknown image_dim_ordering')
-    
+
 # The actual network structure
 # results in a (6 x 6 x 32) output volume
 model.add(Convolution2D(32, (5, 5), activation='relu', data_format='channels_last'))
@@ -43,7 +43,7 @@ model.add(Convolution2D(64, (3, 3), activation='relu', data_format='channels_las
 # flattens the result (vector of size 256)
 model.add(Flatten())
 # add fully-connected layer
-model.add(Dense(128, activation='relu'))
+model.add(Dense(512, activation='relu'))
 # map to output: coordinates and move
 model.add(Dense(nb_actions, activation='linear'))
 print(model.summary())
@@ -148,7 +148,7 @@ if mode == 'train':
     checkpoint_weights_filename = 'dqn_' + env.name + '_weights_{step}.h5f'
     log_filename = 'dqn_{}_log.json'.format(env.name)
     # Add a checkpoint every 250000 iterations
-    callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=250000)]
+    callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=25000)]
     # log to file every 100 iterations
     callbacks += [FileLogger(log_filename, interval=100)]
     dqn.fit(env, callbacks=callbacks, nb_steps=1750000, log_interval=10000)
@@ -164,8 +164,3 @@ elif mode == 'test':
     #    weights_filename = args.weights
     dqn.load_weights(weights_filename)
     dqn.test(env, nb_episodes=10, visualize=True)
-
-
-
-
-
