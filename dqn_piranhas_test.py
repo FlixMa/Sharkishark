@@ -17,35 +17,20 @@ from keras.optimizers import Adam
 import keras.backend as K
 
 INPUT_SHAPE = 10
-DIMENSIONS  = 3
 # WINDOW_LENGTH = 4  # The number of past states we consider
-input_shape = (INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)  # (WINDOW_LENGTH, INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)
+input_shape = (1, INPUT_SHAPE, INPUT_SHAPE)
 
 model = Sequential()
-if K.image_data_format() == 'channels_last':
-    # (batch, width, height, channels)
-    # model.add(Permute((1, 2, 3, 4), input_shape=input_shape))
-    model.add(Permute((1, 2, 3), input_shape=input_shape))
-elif K.image_data_format() == 'channels_first':
-    # (batch, channels, width, height)
-    # model.add(Permute((1, 4, 2, 3), input_shape=input_shape))
-    model.add(Permute((3, 1, 2), input_shape=input_shape))
-else:
-    raise RuntimeError('Unknown image_dim_ordering')
-
 # The actual network structure
-# results in a (6 x 6 x 32) output volume
-model.add(Convolution2D(32, (5, 5), activation='relu', data_format='channels_last'))
-# results in a (4 x 4 x 64) output volume
-model.add(Convolution2D(64, (3, 3), activation='relu', data_format='channels_last'))
-# results in a (2 x 2 x 64) output volume
-model.add(Convolution2D(64, (3, 3), activation='relu', data_format='channels_last'))
-# flattens the result (vector of size 256)
-model.add(Flatten())
-# add fully-connected layer
-model.add(Dense(512, activation='relu'))
-# map to output: coordinates and move
-model.add(Dense(nb_actions, activation='linear'))
+model.add(Flatten(input_shape=input_shape))
+model.add(Dense(200))
+model.add(Activation('relu'))
+model.add(Dense(400))
+model.add(Activation('relu'))
+model.add(Dense(800))
+model.add(Activation('relu'))
+model.add(Dense(nb_actions))
+model.add(Activation('linear'))
 print(model.summary())
 
 
@@ -60,13 +45,6 @@ from core.util import FieldState, PlayerColor
 
 
 class PiranhasProcessor(Processor):
-
-    def process_state_batch(self, batch):
-        """
-        Given a state batch, I want to remove the second dimension, because it's
-        useless and prevents me from feeding the tensor into my CNN
-        """
-        return np.squeeze(batch, axis=1)
 
     def process_reward(self, reward):
         return np.clip(reward, -10., 10.)

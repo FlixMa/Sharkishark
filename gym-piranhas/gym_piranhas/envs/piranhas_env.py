@@ -7,6 +7,7 @@ from core.logic import GameLogicDelegate
 from core.util import FieldState, PlayerColor, Direction, Move
 from core.state import GameSettings, GameResult, GameResultCause, GameState
 from threading import Event
+from time import sleep
 
 
 class PiranhasEnv(gym.Env, GameLogicDelegate):
@@ -20,9 +21,9 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.action_space = spaces.Discrete(800)
 
         self.observation_space = spaces.Box(
-                low=0, high=1, shape=(10, 10, 3), dtype=np.uint8
+                low=0, high=1, shape=(10, 10), dtype=np.uint8
             ),
-        self.observation = np.zeros((10, 10, 3))
+        self.observation = np.zeros((10, 10))
 
         # members from GameLogicDelegate
         super(GameLogicDelegate).__init__()
@@ -119,9 +120,11 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
                 return self.observation, -10., self.result is not None, {'locally_validated': False}
 
         # remember the last game state for reward
-        previous_game_state = self.currentGameState
+        previous_game_state = GameState.copy(self.currentGameState)
+
         self.move_decision_taken_event.set()  # onMoveRequest listens for this event
         print("[env] Move decision set. ")
+        sleep(2)  # for the weirdest reason ever :-(
 
         # wait until game state has been reported
         # what the opponent did -> calc reward based on that too
@@ -132,7 +135,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         # calculate reward
         print("[env] Calculating reward ... ")
-        reward, done = self.calc_reward(previous_game_state)
+        reward, done = self.calc_reward(self.currentGameState, previous_game_state)
         print("[env] Reward: {}; Done: {}".format(reward, done))
 
         return self.observation, reward, done, {'locally_validated': True}
@@ -206,11 +209,9 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         # preprocessing
         print("[env] Preprocessing ... ")
-        self.observation = np.zeros((10, 10, 3))  # (us, opponent, kraken)
+        self.observation = np.zeros((10, 10))  # (us, opponent, kraken)
 
-        self.observation[:, :, 0] = self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor)
-        self.observation[:, :, 1] = self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor)
-        self.observation[:, :, 2] = self.currentGameState.board == FieldState.OBSTRUCTED
+        self.observation = np.array(list(map(lambda x: list(map(lambda y: y.value, x)), self.currentGameState.board)))
 
         if GameSettings.ourColor != GameSettings.startPlayerColor:
             # we normalize the board so that we are always the starting player
@@ -470,7 +471,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         return len(own_fishes_current) - len(own_fishes_previous) + \
                len(opp_fishes_previous) - len(opp_fishes_current)
 
-    def calc_reward(self, previous_game_state):
+    def calc_reward(self, current_game_state, previous_game_state):
         if self.result == GameResult.WON and \
                 self.cause == GameResultCause.REGULAR:
             return 10, True
@@ -483,21 +484,24 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         own_fishes_previous = np.argwhere(
             previous_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor))
         own_fishes_current = np.argwhere(
-            self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor))
+            current_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor))
 
         # opponent's fishes
         opp_fishes_previous = np.argwhere(
             previous_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor()))
         opp_fishes_current = np.argwhere(
-            self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor()))
+            current_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor()))
 
         mean_distance_previous = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_previous)
         mean_distance_current = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_current)
 
+        print('#########################')
+        print(mean_distance_previous, mean_distance_current)
+
         biggest_group_previous = PiranhasEnv.get_biggest_group(
-            GameSettings.ourColor, self.currentGameState.board)
+            GameSettings.ourColor, current_game_state.board)
         biggest_group_current = PiranhasEnv.get_biggest_group(
-            GameSettings.ourColor.otherColor(), self.currentGameState.board)
+            GameSettings.ourColor.otherColor(), current_game_state.board)
 
         # remote eaten fish
         reward_fish_eaten = PiranhasEnv.get_eaten_fish_reward(
