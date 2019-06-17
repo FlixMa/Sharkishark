@@ -181,9 +181,6 @@ class Parser():
         if data is None:
             return None
 
-        print('Parsing result...')
-        print(data.prettify())
-
         winner = data.find('winner')
         winningPlayer = None
         if winner is not None:
