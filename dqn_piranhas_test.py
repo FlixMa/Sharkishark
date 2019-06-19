@@ -9,54 +9,69 @@ import numpy as np
 env = gym.make('piranhas-v0')
 np.random.seed(12342)
 env.seed(123042)
-nb_actions = env.action_space.n
+nb_actions = env.action_space.shape[0]
 
-from keras.models import Sequential
-from keras.layers import Convolution2D, Convolution3D, Flatten, Dense, Activation, Permute
+from keras.models import Sequential, Model
+from keras.layers import Convolution2D, Convolution3D, Input, Concatenate, Flatten, Dense, Activation, Permute
 from keras.optimizers import Adam
 import keras.backend as K
 
 INPUT_SHAPE = 10
-DIMENSIONS  = 3
+DIMENSIONS  = 33
 # WINDOW_LENGTH = 4  # The number of past states we consider
-input_shape = (INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)  # (WINDOW_LENGTH, INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)
+input_shape = (DIMENSIONS, INPUT_SHAPE, INPUT_SHAPE)  # (WINDOW_LENGTH, INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)
 
-model = Sequential()
+actor = Sequential()
 if K.image_data_format() == 'channels_last':
     # (batch, width, height, channels)
-    # model.add(Permute((1, 2, 3, 4), input_shape=input_shape))
-    model.add(Permute((1, 2, 3), input_shape=input_shape))
+    actor.add(Permute((3, 1, 2), input_shape=input_shape))
 elif K.image_data_format() == 'channels_first':
     # (batch, channels, width, height)
-    # model.add(Permute((1, 4, 2, 3), input_shape=input_shape))
-    model.add(Permute((3, 1, 2), input_shape=input_shape))
+    actor.add(Permute((1, 2, 3), input_shape=input_shape))
 else:
     raise RuntimeError('Unknown image_dim_ordering')
 
 # The actual network structure
 # results in a (6 x 6 x 32) output volume
-model.add(Convolution2D(32, (5, 5), activation='relu', data_format='channels_last'))
+actor.add(Convolution2D(64, (1, 1), activation='relu', data_format='channels_first'))
 # results in a (4 x 4 x 64) output volume
-model.add(Convolution2D(64, (3, 3), activation='relu', data_format='channels_last'))
+actor.add(Convolution2D(128, (3, 3), activation='relu', data_format='channels_first'))
 # results in a (2 x 2 x 64) output volume
-model.add(Convolution2D(64, (3, 3), activation='relu', data_format='channels_last'))
+actor.add(Convolution2D(256, (1, 1), activation='relu', data_format='channels_first'))
 # flattens the result (vector of size 256)
-model.add(Flatten())
+actor.add(Flatten())
+actor.add(Dense(4096, activation='relu'))
+actor.add(Dense(1024, activation='relu'))
 # add fully-connected layer
-model.add(Dense(512, activation='relu'))
+actor.add(Dense(512, activation='relu'))
+actor.add(Dense(256, activation='relu'))
 # map to output: coordinates and move
-model.add(Dense(nb_actions, activation='linear'))
-print(model.summary())
+actor.add(Dense(nb_actions, activation='linear'))
+print(actor.summary())
 
 
+action_input = Input(shape=(nb_actions,), name='action_input')
+observation_input = Input(shape=input_shape, name='observation_input')
+flattened_observation = Flatten()(observation_input)
+x = Concatenate()([action_input, flattened_observation])
+x = Dense(32)(x)
+x = Activation('relu')(x)
+x = Dense(32)(x)
+x = Activation('relu')(x)
+x = Dense(32)(x)
+x = Activation('relu')(x)
+x = Dense(1)(x)
+x = Activation('linear')(x)
+critic = Model(inputs=[action_input, observation_input], outputs=x)
+print(critic.summary())
+
+
+from rl.agents import DDPGAgent
 from rl.agents.dqn import DQNAgent
 from rl.policy import LinearAnnealedPolicy, BoltzmannQPolicy, EpsGreedyQPolicy
 from rl.memory import SequentialMemory
 from rl.core import Processor
-from rl.callbacks import FileLogger, ModelIntervalCheckpoint
-
-from core.state import GameState
-from core.util import FieldState, PlayerColor
+from rl.random import OrnsteinUhlenbeckProcess
 
 
 class PiranhasProcessor(Processor):
@@ -88,13 +103,11 @@ processor = PiranhasProcessor()
 # the agent initially explores the environment (high eps) and then gradually sticks to what it knows
 # (low eps). We also set a dedicated eps value that is used during testing. Note that we set it to 0.05
 # so that the agent still performs some random actions. This ensures that the agent cannot get stuck.
-policy = LinearAnnealedPolicy(EpsGreedyQPolicy(), attr='eps', value_max=1., value_min=.1, value_test=.05,
-                              nb_steps=1000000)
-
-dqn = DQNAgent(model=model, nb_actions=nb_actions, policy=policy, memory=memory,
-               processor=processor, nb_steps_warmup=50000, gamma=.99, target_model_update=10000,
-               train_interval=4, delta_clip=1.)
-dqn.compile(Adam(lr=.00025), metrics=['mae'])
+random_process = OrnsteinUhlenbeckProcess(size=nb_actions, theta=.15, mu=0., sigma=.3)
+agent = DDPGAgent(nb_actions=nb_actions, actor=actor, critic=critic, critic_action_input=action_input,
+                  memory=memory, nb_steps_warmup_critic=100, nb_steps_warmup_actor=100,
+                  processor=processor, random_process=random_process, gamma=.99, target_model_update=1e-3)
+agent.compile(Adam(lr=.001, clipnorm=1.), metrics=['mae'])
 
 # start server before this
 
@@ -151,16 +164,16 @@ if mode == 'train':
     callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=25000)]
     # log to file every 100 iterations
     callbacks += [FileLogger(log_filename, interval=100)]
-    dqn.fit(env, callbacks=callbacks, nb_steps=1750000, log_interval=10000)
+    agent.fit(env, callbacks=callbacks, nb_steps=1750000, log_interval=10000)
 
     # After training is done, we save the final weights one more time.
-    dqn.save_weights(weights_filename, overwrite=True)
+    agent.save_weights(weights_filename, overwrite=True)
 
     # Finally, evaluate our algorithm for 10 episodes.
-    dqn.test(env, nb_episodes=10, visualize=False)
+    agent.test(env, nb_episodes=10, visualize=False)
 elif mode == 'test':
     weights_filename = 'dqn_{}_weights.h5f'.format(env.name)
     #if args.weights:
     #    weights_filename = args.weights
-    dqn.load_weights(weights_filename)
-    dqn.test(env, nb_episodes=10, visualize=True)
+    agent.load_weights(weights_filename)
+    agent.test(env, nb_episodes=10, visualize=True)
