@@ -215,7 +215,7 @@ class Parser():
             playerResult = GameResult.fromInt(playerResult)
 
             parsedScore = (cause, reasonString, playerResult, playerPoints)
-            if (weWon and playerResult == GameResult.WON) or (not weWon and GameResult.LOST):
+            if (weWon and playerResult == GameResult.WON) or (not weWon and playerResult == GameResult.LOST):
                 ourScore = parsedScore
             else:
                 theirScore = parsedScore
