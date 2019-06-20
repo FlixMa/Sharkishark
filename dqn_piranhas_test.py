@@ -22,10 +22,10 @@ DIMENSIONS  = 33
 input_shape = (DIMENSIONS, INPUT_SHAPE, INPUT_SHAPE)  # (WINDOW_LENGTH, INPUT_SHAPE, INPUT_SHAPE, DIMENSIONS)
 
 actor = Sequential()
-if K.image_data_format() == 'channels_last':
+if K.image_data_format() == 'channels_first':
     # (batch, width, height, channels)
     actor.add(Permute((3, 1, 2), input_shape=input_shape))
-elif K.image_data_format() == 'channels_first':
+elif K.image_data_format() == 'channels_last':
     # (batch, channels, width, height)
     actor.add(Permute((1, 2, 3), input_shape=input_shape))
 else:
@@ -37,10 +37,9 @@ actor.add(Convolution2D(64, (1, 1), activation='relu', data_format='channels_fir
 # results in a (4 x 4 x 64) output volume
 actor.add(Convolution2D(128, (3, 3), activation='relu', data_format='channels_first'))
 # results in a (2 x 2 x 64) output volume
-actor.add(Convolution2D(256, (1, 1), activation='relu', data_format='channels_first'))
+actor.add(Convolution2D(128, (1, 1), activation='relu', data_format='channels_first'))
 # flattens the result (vector of size 256)
 actor.add(Flatten())
-actor.add(Dense(4096, activation='relu'))
 actor.add(Dense(1024, activation='relu'))
 # add fully-connected layer
 actor.add(Dense(512, activation='relu'))
