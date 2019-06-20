@@ -152,6 +152,7 @@ def makeNewGame():
 env.set_reset_callback(makeNewGame)
 
 from rl.callbacks import FileLogger, ModelIntervalCheckpoint
+import os
 
 mode = 'train'
 if mode == 'train':
@@ -164,7 +165,9 @@ if mode == 'train':
     callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=25000)]
     # log to file every 100 iterations
     callbacks += [FileLogger(log_filename, interval=100)]
-    agent.fit(env, callbacks=callbacks, nb_steps=1750000, log_interval=10000)
+    if os.path.exists(weights_filename):
+        agent.load_weights(weights_filename)
+    agent.fit(env, callbacks=callbacks, nb_steps=1000000000, log_interval=10000)
 
     # After training is done, we save the final weights one more time.
     agent.save_weights(weights_filename, overwrite=True)
@@ -173,7 +176,5 @@ if mode == 'train':
     agent.test(env, nb_episodes=10, visualize=False)
 elif mode == 'test':
     weights_filename = 'dqn_{}_weights.h5f'.format(env.name)
-    #if args.weights:
-    #    weights_filename = args.weights
     agent.load_weights(weights_filename)
     agent.test(env, nb_episodes=10, visualize=True)
