@@ -21,7 +21,7 @@ model.add(Dense(2048, input_shape=env.observation_space.shape, activation='relu'
 model.add(Dense(1536, activation='relu'))
 model.add(Dense(1024, activation='relu'))
 # map to output: coordinates and move
-model.add(Dense(nb_actions, activation='linear'))
+model.add(Dense(nb_actions, activation='softmax'))
 model.build()
 print(model.summary())
 
@@ -46,7 +46,9 @@ class PiranhasProcessor(Processor):
         return np.squeeze(batch, axis=1)
 
     def process_reward(self, reward):
-        return np.clip(reward, -10., 10.)
+        with open('./rewards.txt', 'a') as file:
+            file.write('%.3f\n' % float(reward))
+        return np.clip(reward, -100., 100.)
 
 # copied from https://github.com/keras-rl/keras-rl/blob/master/examples/dqn_atari.py
 # Add memory
@@ -65,13 +67,12 @@ processor = PiranhasProcessor()
 # the agent initially explores the environment (high eps) and then gradually sticks to what it knows
 # (low eps). We also set a dedicated eps value that is used during testing. Note that we set it to 0.05
 # so that the agent still performs some random actions. This ensures that the agent cannot get stuck.
-policy = LinearAnnealedPolicy(EpsGreedyQPolicy(), attr='eps', value_max=1., value_min=.1, value_test=.05,
-                              nb_steps=1000000)
+policy = EpsGreedyQPolicy(0.95)
 
 dqn = DQNAgent(model=model, nb_actions=nb_actions, policy=policy, memory=memory,
                processor=processor, nb_steps_warmup=50000, gamma=.99, target_model_update=10000,
                train_interval=4, delta_clip=1.)
-dqn.compile(Adam(lr=.00025), metrics=['mae'])
+dqn.compile(Adam(lr=.0025), metrics=['mae'])
 
 # start server before this
 

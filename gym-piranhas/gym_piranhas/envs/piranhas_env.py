@@ -128,7 +128,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
                 if self.debug:
                     print("[env] Move is invalid. ")
                 self.move_request_event.set() # to not get stuck above
-                return self.observation, -10., self.result is not None, {'locally_validated': False}
+                return self.observation, -100., self.result is not None, {'locally_validated': False}
 
         # remember the last game state for reward
         previous_game_state = self.currentGameState
@@ -221,7 +221,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
     # Overridden methods inherited from GameLogicDelegate
 
     def onGameStateUpdate(self, game_state):
-        super().onGameStateUpdate(game_state)
+        #super().onGameStateUpdate(game_state)
         self.currentGameState = GameState.copy(game_state)
 
 
@@ -253,7 +253,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             print("[env] Preprocessing done.")
 
     def onMoveRequest(self):
-        super().onMoveRequest()
+        #super().onMoveRequest()
         if self.currentGameState is None:
             print('[env] there is no field')
             return None
@@ -510,11 +510,11 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
     def calc_reward(self, previous_game_state):
         if self.result == GameResult.WON and \
                 self.cause == GameResultCause.REGULAR:
-            return 10, True
+            return 100.0, True
         elif self.result == GameResult.LOST and \
                 (self.cause == GameResultCause.REGULAR or
                  self.cause == GameResultCause.RULE_VIOLATION):
-            return -10, True
+            return -100.0, True
 
         # compare current board to last board
         own_fishes_previous = np.argwhere(
