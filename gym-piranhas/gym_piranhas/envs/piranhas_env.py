@@ -148,7 +148,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         # calculate reward
         logging.debug("[env] Calculating reward ... ")
         reward, done = self.calc_reward(previous_game_state)
-        logging.info("[env] Reward: {}; Done: {}".format(reward, done))
+        print("\n[env] Reward: {}; Done: {}".format(reward, done))
 
         return self.observation, reward, done, {'locally_validated': True}
 
@@ -162,14 +162,16 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.currentGameState = None
         self.result = None
         self.cause = None
-        self.reset_callback()
         self.game_state_update_event.clear()
         self.move_request_event.clear()
         self.move_decision_taken_event.clear()
-        logging.debug("[env] Waiting for initial game state ... ")
+        self.reset_callback()
+        if self.debug:
+            print("[env] Waiting for initial game state ... ")
         self.game_state_update_event.wait()
-        logging.debug("[env] Received initial game state. ")
-
+        self.game_state_update_event.clear()
+        if self.debug:
+            print("[env] Received initial game state. ")
         return self.observation
 
     def render(self, mode='human', close=False):
