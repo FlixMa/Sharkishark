@@ -103,10 +103,18 @@ processor = PiranhasProcessor()
 # (low eps). We also set a dedicated eps value that is used during testing. Note that we set it to 0.05
 # so that the agent still performs some random actions. This ensures that the agent cannot get stuck.
 random_process = OrnsteinUhlenbeckProcess(size=nb_actions, theta=.15, mu=0., sigma=.3)
-agent = DDPGAgent(nb_actions=nb_actions, actor=actor, critic=critic, critic_action_input=action_input,
-                  memory=memory, nb_steps_warmup_critic=100, nb_steps_warmup_actor=100,
-                  processor=processor, random_process=random_process, gamma=.99, target_model_update=1e-3)
-agent.compile(Adam(lr=.001, clipnorm=1.), metrics=['mae'])
+agent = DDPGAgent(nb_actions=nb_actions,
+                  actor=actor,
+                  critic=critic,
+                  critic_action_input=action_input,
+                  memory=memory,
+                  nb_steps_warmup_critic=50000,
+                  nb_steps_warmup_actor=50000,
+                  processor=processor,
+                  random_process=random_process,
+                  gamma=.99,
+                  target_model_update=10000)
+agent.compile(Adam(lr=.25, clipnorm=1.), metrics=['mae'])
 
 # start server before this
 
@@ -150,6 +158,7 @@ def makeNewGame():
 
 env.set_reset_callback(makeNewGame)
 
+import os
 from rl.callbacks import FileLogger, ModelIntervalCheckpoint
 import os
 
@@ -160,8 +169,10 @@ if mode == 'train':
     weights_filename = 'dqn_{}_weights.h5f'.format(env.name)
     checkpoint_weights_filename = 'dqn_' + env.name + '_weights_{step}.h5f'
     log_filename = 'dqn_{}_log.json'.format(env.name)
+    if os.path.exists(weights_filename):
+        dqn.load_weights(weights_filename)
     # Add a checkpoint every 250000 iterations
-    callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=25000)]
+    callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=250000)]
     # log to file every 100 iterations
     callbacks += [FileLogger(log_filename, interval=100)]
     if os.path.exists(weights_filename):
