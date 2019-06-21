@@ -17,19 +17,11 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         # members from gym.Env
         self.name = 'piranhas'
 
-<<<<<<< HEAD
         # full steam ahead
         self.action_space = spaces.Box(
             low=np.array([0.0, 0.0]),
             high=np.array([15.0, 8.0]),
             dtype=np.float32
-=======
-        self.observation_space = spaces.Box(
-            low=0,
-            high=1,
-            shape=(1000,),
-            dtype=np.float
->>>>>>> 7a5784f... Update model parameters
         )
 
         self.observation_space = spaces.Box(
