@@ -23,7 +23,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             low=0,
             high=1,
             shape=(1000,),
-            dtype=np.uint8
+            dtype=np.float
         )
         self.observation = None
 
@@ -149,7 +149,8 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         if self.debug:
             print("[env] Calculating reward ... ")
         reward, done = self.calc_reward(previous_game_state)
-        print("\n[env] Reward: {}; Done: {}".format(reward, done))
+        print("\n[env] Reward: {:.2f}; GameResult: {}; Cause: {}".format(
+            reward, self.result, self.cause))
 
         return self.observation, reward, done, {'locally_validated': True}
 

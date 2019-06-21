@@ -17,8 +17,7 @@ from keras.optimizers import Adam
 import keras.backend as K
 
 model = Sequential()
-model.add(Dense(2048, input_shape=env.observation_space.shape, activation='relu'))
-model.add(Dense(1536, activation='relu'))
+model.add(Dense(1536, input_shape=env.observation_space.shape, activation='relu'))
 model.add(Dense(1024, activation='relu'))
 # map to output: coordinates and move
 model.add(Dense(nb_actions, activation='softmax'))
@@ -69,10 +68,17 @@ processor = PiranhasProcessor()
 # so that the agent still performs some random actions. This ensures that the agent cannot get stuck.
 policy = EpsGreedyQPolicy(0.95)
 
-dqn = DQNAgent(model=model, nb_actions=nb_actions, policy=policy, memory=memory,
-               processor=processor, nb_steps_warmup=50000, gamma=.99, target_model_update=10000,
-               train_interval=4, delta_clip=1.)
-dqn.compile(Adam(lr=.0025), metrics=['mae'])
+dqn = DQNAgent(model=model,
+               nb_actions=nb_actions,
+               policy=policy,
+               memory=memory,
+               processor=processor,
+               nb_steps_warmup=50000,
+               gamma=.99,
+               target_model_update=10000,
+               train_interval=4,
+               delta_clip=1.,)
+dqn.compile(Adam(lr=.25), metrics=['mae'])
 
 # start server before this
 
@@ -116,6 +122,7 @@ def makeNewGame():
 
 env.set_reset_callback(makeNewGame)
 
+import os
 from rl.callbacks import FileLogger, ModelIntervalCheckpoint
 
 mode = 'train'
@@ -125,11 +132,13 @@ if mode == 'train':
     weights_filename = 'dqn_{}_weights.h5f'.format(env.name)
     checkpoint_weights_filename = 'dqn_' + env.name + '_weights_{step}.h5f'
     log_filename = 'dqn_{}_log.json'.format(env.name)
+    if os.path.exists(weights_filename):
+        dqn.load_weights(weights_filename)
     # Add a checkpoint every 250000 iterations
-    callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=25000)]
+    callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=250000)]
     # log to file every 100 iterations
     callbacks += [FileLogger(log_filename, interval=100)]
-    dqn.fit(env, callbacks=callbacks, nb_steps=1750000, log_interval=10000)
+    dqn.fit(env, callbacks=callbacks, nb_steps=17500000, log_interval=10000)
 
     # After training is done, we save the final weights one more time.
     dqn.save_weights(weights_filename, overwrite=True)
