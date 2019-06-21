@@ -26,7 +26,8 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             dtype=np.float
         )
         self.observation = None
-
+        self.num_consecutive_invalid_moves = 0
+        self.num_consecutive_valid_moves = 0
 
         # members from GameLogicDelegate
         super(GameLogicDelegate).__init__()
@@ -115,7 +116,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             self.global_move = PiranhasEnv.retrieve_move(action)
         else:
             self.global_move = PiranhasEnv.retrieve_move(action, rotate=True)
-
+        #print("\n[env] %s"% self.global_move)
         # check if move is valid
         # -> let the net redo the step action if not
         # -> otherwise continue
@@ -125,10 +126,29 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
                 print("[env] Validating move locally... ")
             valid, destination = PiranhasEnv.validate_move(self.global_move, self.currentGameState)
             if not valid:
+                if self.num_consecutive_valid_moves > 0:
+                    print("\n[env] Number of consecutive valid moves:", self.num_consecutive_valid_moves)
+                self.num_consecutive_valid_moves = 0
+                self.num_consecutive_invalid_moves += 1
+
+                # calculate new board to give the neural network the following observation
+                local_game_state = GameState.copy(self.currentGameState)
+                local_game_state.board[self.global_move.y, self.global_move.x] = FieldState.EMPTY
+                local_observation = PiranhasEnv.convert_game_state(local_game_state)
+
                 if self.debug:
                     print("[env] Move is invalid. ")
                 self.move_request_event.set() # to not get stuck above
-                return self.observation, -100., self.result is not None, {'locally_validated': False}
+                return local_observation, -100., self.result is not None, {
+                    'locally_validated': False,
+                    'num_consecutive_valid_moves': self.num_consecutive_valid_moves,
+                    'num_consecutive_invalid_moves': self.num_consecutive_invalid_moves
+                }
+            else:
+                if self.num_consecutive_invalid_moves > 0:
+                    print("\n[env] Number of consecutive invalid moves:", self.num_consecutive_invalid_moves)
+                self.num_consecutive_valid_moves += 1
+                self.num_consecutive_invalid_moves = 0
 
         # remember the last game state for reward
         previous_game_state = self.currentGameState
@@ -152,7 +172,11 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         print("\n[env] Reward: {:.2f}; GameResult: {}; Cause: {}".format(
             reward, self.result, self.cause))
 
-        return self.observation, reward, done, {'locally_validated': True}
+        return self.observation, reward, done, {
+            'locally_validated': True,
+            'num_consecutive_valid_moves': self.num_consecutive_valid_moves,
+            'num_consecutive_invalid_moves': self.num_consecutive_invalid_moves
+        }
 
     def reset(self):
         """
@@ -165,6 +189,9 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.currentGameState = None
         self.result = None
         self.cause = None
+        self.num_consecutive_valid_moves = 0
+        self.num_consecutive_invalid_moves = 0
+
         self.game_state_update_event.clear()
         self.move_request_event.clear()
         self.move_decision_taken_event.clear()
@@ -224,29 +251,10 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         #super().onGameStateUpdate(game_state)
         self.currentGameState = GameState.copy(game_state)
 
-
-        if GameSettings.ourColor != GameSettings.startPlayerColor:
-            # we normalize the board so that we are always the starting player
-            # who has fishes on the left and right hand side
-            game_state.board = np.rot90(game_state.board)
-
         # preprocessing
         if self.debug:
             print("[env] Preprocessing ... ")
-        self.observation = np.zeros((10 * 10 * (8 + 2)), dtype=np.bool)
-        positions = np.argwhere(game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor))
-
-        dir_enumerated = list(enumerate(Direction))
-        for x, y in positions:
-            for i, dir in dir_enumerated:
-                move = Move(x, y, dir)
-                idx = (x + (y * 10)) * 8 + i
-                self.observation[idx] = PiranhasEnv.validate_move(move, game_state)[0]
-
-        self.observation[-200:-100] = (game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor())).flatten()
-        self.observation[-100:] = (game_state.board == FieldState.OBSTRUCTED).flatten()
-
-        #self.observation = self.observation.astype('uint8')  # saves storage in experience memory
+        self.observation = PiranhasEnv.convert_game_state(game_state)
 
         self.game_state_update_event.set()
         if self.debug:
@@ -281,6 +289,29 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         return True
 
     # Helper methods
+    @staticmethod
+    def convert_game_state(game_state):
+        if GameSettings.ourColor != GameSettings.startPlayerColor:
+            # we normalize the board so that we are always the starting player
+            # who has fishes on the left and right hand side
+            game_state.board = np.rot90(game_state.board)
+
+        observation = np.zeros((10 * 10 * (8 + 2)), dtype=np.bool)
+        positions = np.argwhere(game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor))
+
+        dir_enumerated = list(enumerate(Direction))
+        for x, y in positions:
+            for i, dir in dir_enumerated:
+                move = Move(x, y, dir)
+                idx = (x + (y * 10)) * 8 + i
+                observation[idx] = PiranhasEnv.validate_move(move, game_state)[0]
+
+        observation[-200:-100] = (game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor())).flatten()
+        observation[-100:] = (game_state.board == FieldState.OBSTRUCTED).flatten()
+
+        return observation
+
+
     @staticmethod
     def retrieve_move(action, rotate=False):
         direction = Direction.fromInt(int(action % 8))
