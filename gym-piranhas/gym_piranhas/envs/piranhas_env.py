@@ -1,8 +1,10 @@
 import gym
 import numpy as np
+import subprocess
 from math import sqrt
 from gym import error, spaces, utils
 from gym.utils import seeding
+from core.communication import GameClient
 from core.logic import GameLogicDelegate
 from core.util import FieldState, PlayerColor, Direction, Move
 from core.state import GameSettings, GameResult, GameResultCause, GameState
@@ -38,6 +40,13 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.reset_callback = None
         self.result = None
         self.cause = None
+
+        self.simulation_is_active = False
+
+        self.game_client = None
+        self.host = '127.0.0.1'
+        self.port = 13050
+        self.opponents_executable = "java -jar ../simpleclient-piranhas-19.2.1.jar --host {host} --port {port}"
 
         # numpy random object
         self.np_random = None
@@ -97,6 +106,9 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             -> bei 1 weitermachen
         '''
 
+        if self.simulation_is_active:
+            return self.simulate_step(action)
+
         # 1. aktuellen game state auslesen (nur beim ersten mal hier oben)
 
         # in the first round only (not None)
@@ -116,39 +128,6 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             self.global_move = PiranhasEnv.retrieve_move(action)
         else:
             self.global_move = PiranhasEnv.retrieve_move(action, rotate=True)
-        #print("\n[env] %s"% self.global_move)
-        # check if move is valid
-        # -> let the net redo the step action if not
-        # -> otherwise continue
-
-        if self.currentGameState is not None:
-            if self.debug:
-                print("[env] Validating move locally... ")
-            valid, destination = PiranhasEnv.validate_move(self.global_move, self.currentGameState)
-            if not valid:
-                if self.num_consecutive_valid_moves > 0:
-                    print("\n[env] Number of consecutive valid moves:", self.num_consecutive_valid_moves)
-                self.num_consecutive_valid_moves = 0
-                self.num_consecutive_invalid_moves += 1
-
-                # calculate new board to give the neural network the following observation
-                local_game_state = GameState.copy(self.currentGameState)
-                local_game_state.board[self.global_move.y, self.global_move.x] = FieldState.EMPTY
-                local_observation = PiranhasEnv.convert_game_state(local_game_state)
-
-                if self.debug:
-                    print("[env] Move is invalid. ")
-                self.move_request_event.set() # to not get stuck above
-                return local_observation, -100., self.result is not None, {
-                    'locally_validated': False,
-                    'num_consecutive_valid_moves': self.num_consecutive_valid_moves,
-                    'num_consecutive_invalid_moves': self.num_consecutive_invalid_moves
-                }
-            else:
-                if self.num_consecutive_invalid_moves > 0:
-                    print("\n[env] Number of consecutive invalid moves:", self.num_consecutive_invalid_moves)
-                self.num_consecutive_valid_moves += 1
-                self.num_consecutive_invalid_moves = 0
 
         # remember the last game state for reward
         previous_game_state = self.currentGameState
@@ -172,13 +151,32 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         print("\n[env] Reward: {:.2f}; GameResult: {}; Cause: {}".format(
             reward, self.result, self.cause))
 
-        return self.observation, reward, done, {
-            'locally_validated': True,
-            'num_consecutive_valid_moves': self.num_consecutive_valid_moves,
-            'num_consecutive_invalid_moves': self.num_consecutive_invalid_moves
-        }
+        return self.observation, reward, done, {}
 
-    def reset(self):
+    def simulate_step(self, action):
+        if not self.simulation_is_active:
+            raise IllegalStateException('Can\'t simulate a step when not being in simulation mode.')
+
+        if GameSettings.ourColor == GameSettings.startPlayerColor:
+            self.global_move = PiranhasEnv.retrieve_move(action)
+        else:
+            self.global_move = PiranhasEnv.retrieve_move(action, rotate=True)
+
+        previous_game_state = self.currentGameState
+
+        next_game_state = self.currentGameState.apply(self.global_move)
+
+        user_info = {'simulation_is_active': self.simulation_is_active}
+
+        if next_game_state is None:
+            return self.observation, -100.0, True, user_info
+
+        self.currentGameState = next_game_state
+        reward, done = self.calc_reward(previous_game_state)
+        self.observation = PiranhasEnv.convert_game_state(next_game_state)
+        return self.observation, reward, done, user_info
+
+    def reset(self, initial_game_state=None):
         """
         Resets the state of the environment and returns an initial observation.
         Returns:
@@ -195,13 +193,23 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.game_state_update_event.clear()
         self.move_request_event.clear()
         self.move_decision_taken_event.clear()
-        self.reset_callback()
-        if self.debug:
-            print("[env] Waiting for initial game state ... ")
-        self.game_state_update_event.wait()
-        self.game_state_update_event.clear()
-        if self.debug:
-            print("[env] Received initial game state. ")
+
+
+        if self.simulation_is_active:
+            if not isinstance(initial_game_state, GameState):
+                raise ValueError('No initial GameState given. Got: ' + str(type(initial_game_state)))
+            self.currentGameState = initial_game_state
+            self.observation = PiranhasEnv.convert_game_state(initial_game_state)
+        else:
+            self.makeNewGame()
+
+            if self.debug:
+                print("[env] Waiting for initial game state ... ")
+            self.game_state_update_event.wait()
+            self.game_state_update_event.clear()
+            if self.debug:
+                print("[env] Received initial game state. ")
+
         return self.observation
 
     def render(self, mode='human', close=False):
@@ -245,10 +253,24 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         """
         pass
 
+    def makeNewGame(self):
+        if self.simulation_is_active:
+            return
+
+        self.game_client = GameClient(self.host, self.port, self)
+        self.game_client.start()
+        self.game_client.join()
+        subprocess.Popen(
+            self.opponents_executable.format(host=self.host, port=self.port),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            shell=True
+         )
+
     # Overridden methods inherited from GameLogicDelegate
 
     def onGameStateUpdate(self, game_state):
-        #super().onGameStateUpdate(game_state)
+        super().onGameStateUpdate(game_state)
         self.currentGameState = GameState.copy(game_state)
 
         # preprocessing
@@ -261,7 +283,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             print("[env] Preprocessing done.")
 
     def onMoveRequest(self):
-        #super().onMoveRequest()
+        super().onMoveRequest()
         if self.currentGameState is None:
             print('[env] there is no field')
             return None
@@ -304,7 +326,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             for i, dir in dir_enumerated:
                 move = Move(x, y, dir)
                 idx = (x + (y * 10)) * 8 + i
-                observation[idx] = PiranhasEnv.validate_move(move, game_state)[0]
+                observation[idx] = move.validate(game_state)[0]
 
         observation[-200:-100] = (game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor())).flatten()
         observation[-100:] = (game_state.board == FieldState.OBSTRUCTED).flatten()
@@ -314,6 +336,11 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
     @staticmethod
     def retrieve_move(action, rotate=False):
+        try:
+            action = int(action)
+        except Exception as ex:
+            raise ValueError('Got action of invalid type. Expected int, got: ' + str(type(action)) + ' -> ' + str(action) + '\n' + str(ex))
+
         direction = Direction.fromInt(int(action % 8))
         move_x = (action // 8) // 10
         move_y = (action // 8) % 10
@@ -330,214 +357,6 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
         return Move(move_x, move_y, direction)
 
-    @staticmethod
-    def validate_move(move, gameState, debug=False):
-        '''
-            Returns a tuple:
-            1. flag, if move is valid
-            2. destination (x, y) of that move or None if invalid
-        '''
-
-        if not isinstance(move, Move):
-            raise ValueError('move argument is not of type "Move". Given: ' + str(type(move)))
-
-        if not isinstance(gameState, GameState):
-            raise ValueError('gameState argument is not of type "GameState". Given: ' + str(type(gameState)))
-
-        if gameState.board is None:
-            raise ValueError('No board found.')
-
-        board = gameState.board
-
-        '''
-            check if this move is valid
-
-            1. a fish of ours is selected
-            2. the fish can move in that direction (not directly next to the bounds)
-            3. destination is empty or opponent's fish (not ours and not a kraken)
-            4. our fish does not jump over a opponent's fish
-        '''
-
-        ourFishFieldState = FieldState.fromPlayerColor(GameSettings.ourColor)
-
-        if not (board[move.x, move.y] == ourFishFieldState):
-            if debug:
-                print('Can\'t mind control the opponents fishes :(')
-            return False, None
-
-        # count fishes in that row
-        #
-        # on which axis are we and
-        # on that axis - where are we exactly?
-        axis = None
-        current_position_on_axis = None
-        if move.direction == Direction.UP or move.direction == Direction.DOWN:
-            axis = board[move.x]
-            current_position_on_axis = move.y
-        elif move.direction == Direction.LEFT or move.direction == Direction.RIGHT:
-            axis = board[:, move.y]
-            current_position_on_axis = move.x
-        elif move.direction == Direction.DOWN_LEFT or move.direction == Direction.UP_RIGHT:
-            axis = board.diagonal(move.y - move.x)
-            current_position_on_axis = move.x if move.y > move.x else move.y
-        elif move.direction == Direction.UP_LEFT or move.direction == Direction.DOWN_RIGHT:
-            flippedX = ((board.shape[0] - 1) - move.x)
-
-            # NOTE: flipud actually flips the board left to right because of the way how we index it
-            axis = np.flipud(board).diagonal(move.y - flippedX)
-
-            current_position_on_axis = flippedX if move.y > flippedX else move.y
-
-        if debug:
-            print('move', move.direction.name, (move.x, move.y), '-> axis: [ ', end='')
-            for item in axis:
-                print(item.name, end=' ')
-            print('], idx:', current_position_on_axis)
-
-        num_fishes = ((axis == FieldState.RED) | (axis == FieldState.BLUE)).sum()
-        if debug:
-            print('-> fishlis:', num_fishes)
-
-        #  where do we wanna go?
-        #  NOTE: y is upside down / inverted
-        direction_forward = (move.direction in [Direction.UP, Direction.UP_LEFT, Direction.UP_RIGHT, Direction.RIGHT])
-        destination_position_on_axis = (current_position_on_axis + num_fishes) if direction_forward else (current_position_on_axis - num_fishes)
-        if debug:
-            print('direction_forward:', direction_forward)
-            print('destination:', destination_position_on_axis)
-
-        # check for bounds
-        if destination_position_on_axis < 0 or destination_position_on_axis >= axis.size:
-            if debug:
-                print('Exceeding bounds. %d of %d' % (destination_position_on_axis, axis.size))
-            return False, None
-
-        # what type is that destination field?
-        destinationFieldState = axis[destination_position_on_axis]
-        if destinationFieldState == FieldState.OBSTRUCTED or destinationFieldState == ourFishFieldState:
-            if debug:
-                print('Destination is obstructed or own fish:', destinationFieldState)
-            return False, None
-
-        # is an opponents fish in between(! excluding the destiantion !)?
-        opponentsFieldState = FieldState.RED if ourFishFieldState == FieldState.BLUE else FieldState.BLUE
-        for idx in range(current_position_on_axis, destination_position_on_axis, 1 if direction_forward else -1):
-            if axis[idx] == opponentsFieldState:
-                if debug:
-                    print('Can\'t jump over opponents fish.')
-                return False, None
-
-
-        dest_x, dest_y = move.x, move.y
-        if move.direction == Direction.UP or move.direction == Direction.DOWN:
-            dest_y = destination_position_on_axis
-        elif move.direction == Direction.LEFT or move.direction == Direction.RIGHT:
-            dest_x = destination_position_on_axis
-        elif move.direction == Direction.DOWN_LEFT or move.direction == Direction.UP_RIGHT:
-            dest_x += num_fishes * (1 if direction_forward else -1)
-            dest_y += num_fishes * (1 if direction_forward else -1)
-        elif move.direction == Direction.UP_LEFT or move.direction == Direction.DOWN_RIGHT:
-            dest_x -= num_fishes * (1 if direction_forward else -1)
-            dest_y += num_fishes * (1 if direction_forward else -1)
-
-        return True, (dest_x, dest_y)
-
-    @staticmethod
-    def norm(a):
-        return sqrt(a[0] ** 2 + a[1] ** 2)
-
-    @staticmethod
-    def calc_mean_distance(fishes):
-        mean_coordinate = np.array([0, 0])
-        for fish_coord in fishes:
-            mean_coordinate += fish_coord
-
-        mean_coordinate /= len(fishes)
-
-        mean_distance = 0
-        for fish in fishes:
-            mean_distance += PiranhasEnv.norm(mean_coordinate - fish)
-        return mean_distance / len(fishes)
-
-    @staticmethod
-    def calc_mean_distance_using_median_center(fishes):
-        median_coordinate = np.percentile(fishes,
-                                          50,
-                                          axis=0,
-                                          interpolation='nearest')
-
-        squared_error = 0
-        for fish_coord in fishes:
-            squared_error += np.square(median_coordinate - fish_coord).sum()
-        return squared_error / len(fishes)
-
-    @staticmethod
-    def neighbors(x, y, boolBoard):
-
-        xmin = max(0, x - 1)
-        xmax = min(x + 2, boolBoard.shape[0])
-        ymin = max(0, y - 1)
-        ymax = min(y + 2, boolBoard.shape[1])
-
-        neighborhood = boolBoard[xmin:xmax, ymin:ymax]
-        # print('umfeld')
-        # print(neighborhood)
-
-        neighbors = np.argwhere(neighborhood)
-
-        neighbors += np.array([xmin, ymin])
-
-        return neighbors
-
-    @staticmethod
-    def find_groups(playerColor, board):
-        boolBoard = (board == FieldState.fromPlayerColor(playerColor))
-        fishesToConsider = np.argwhere(boolBoard)
-        groups = []
-
-        # calculate group for each starting position
-        while len(fishesToConsider) > 0:
-            fish = fishesToConsider[0]
-
-            # get neighborhood of chosen fish and iteratively do a flood-fill
-            fish_neighborhood = PiranhasEnv.neighbors(fish[0], fish[1], boolBoard)
-            i = 0
-            while i < len(fish_neighborhood):
-                neighbor = fish_neighborhood[i]
-
-                its_neighborhood = PiranhasEnv.neighbors(neighbor[0], neighbor[1], boolBoard)
-                concatenated = np.concatenate((fish_neighborhood, its_neighborhood))
-                fish_neighborhood = np.unique(concatenated, axis=0)
-                i += 1
-
-            groups.append(fish_neighborhood)
-
-            # remove all fishes in this group from the fishes to consider next round
-            remainingMask = ~(np.isin(list(map(lambda a: a[0] * 10 + a[1], fishesToConsider)),
-                                      list(map(lambda a: a[0] * 10 + a[1], fish_neighborhood))))
-            fishesToConsider = fishesToConsider[remainingMask]
-
-        return groups
-
-    @staticmethod
-    def get_biggest_group(playerColor, board):
-        groups = PiranhasEnv.find_groups(playerColor, board)
-        largestGroup = None
-        largestSize = 0
-        for group in groups:
-            size = len(group)
-            if largestSize < size:
-                largestSize = size
-                largestGroup = group
-
-        return largestGroup
-
-    @staticmethod
-    def get_eaten_fish_reward(own_fishes_previous, own_fishes_current,
-                              opp_fishes_previous, opp_fishes_current):
-        return len(own_fishes_current) - len(own_fishes_previous) + \
-               len(opp_fishes_previous) - len(opp_fishes_current)
-
     def calc_reward(self, previous_game_state):
         if self.result == GameResult.WON and \
                 self.cause == GameResultCause.REGULAR:
@@ -547,31 +366,6 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
                  self.cause == GameResultCause.RULE_VIOLATION):
             return -100.0, True
 
-        # compare current board to last board
-        own_fishes_previous = np.argwhere(
-            previous_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor))
-        own_fishes_current = np.argwhere(
-            self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor))
+        estimated_reward, done = previous_game_state.estimate_reward(self.currentGameState)
 
-        # opponent's fishes
-        opp_fishes_previous = np.argwhere(
-            previous_game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor()))
-        opp_fishes_current = np.argwhere(
-            self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor()))
-
-        mean_distance_previous = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_previous)
-        mean_distance_current = PiranhasEnv.calc_mean_distance_using_median_center(own_fishes_current)
-
-        biggest_group_previous = PiranhasEnv.get_biggest_group(
-            GameSettings.ourColor, self.currentGameState.board)
-        biggest_group_current = PiranhasEnv.get_biggest_group(
-            GameSettings.ourColor.otherColor(), self.currentGameState.board)
-
-        # remote eaten fish
-        reward_fish_eaten = PiranhasEnv.get_eaten_fish_reward(
-            own_fishes_previous, own_fishes_current,
-            opp_fishes_previous, opp_fishes_current)
-
-        return (mean_distance_previous - mean_distance_current) + \
-               (len(biggest_group_current) - len(biggest_group_previous)) + \
-               reward_fish_eaten, self.result is not None
+        return estimated_reward, done or self.result is not None

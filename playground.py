@@ -15,7 +15,7 @@ a[-1,1:-1] = FieldState.BLUE
 
 a[4, 6] = FieldState.OBSTRUCTED
 a[7, 3] = FieldState.OBSTRUCTED
-#a[4, 3] = FieldState.RED
+a[4, 3] = FieldState.RED
 
 
 state.board = a
@@ -206,7 +206,7 @@ def validate_move(move, gameState=None, debug=False):
         dest_y += num_fishes * (1 if direction_forward else -1)
 
     return True, (dest_x, dest_y)
-
+'''
 import time
 startTime = time.time()
 
@@ -229,4 +229,6 @@ endTime = time.time()
 print((endTime - startTime) * 1000, 'ms')
 for i in range(0, 1000, 100):
     print(possible_moves[i:i+100])
-#
+'''
+move = Move(4, 3, Direction.UP_LEFT)
+state.apply(move).printColored()
