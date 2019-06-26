@@ -19,7 +19,7 @@ port = 13050
 game_environments = []
 client_creation_lock = Lock()
 
-MEMORY_SIZE_PER_TURN = 1e3
+MEMORY_SIZE_PER_TURN = 1e2
 game_states = {}
 queued_game_states = []
 
@@ -141,11 +141,11 @@ def evaluate_genome(genome, config):
                     )
                 '''
                 fitness_this_turn += reward
-                additional_fitness += reward
-            print(' ->', (fitness_this_turn / float(count)))
+            fitness_this_turn /= float(count)
+            print(' ->', fitness_this_turn)
+            additional_fitness += fitness_this_turn
 
-
-        genome.fitness += 9 * (additional_fitness / number_of_trainings)
+        genome.fitness += 9 * (additional_fitness / len(game_states))
         print('\ndone')
 
     return genome.fitness
@@ -178,38 +178,11 @@ def eval_genomes(genomes, config):
     store_data(game_states, GAME_STATE_MEMORY_FILEPATH)
     print('time taken -> store queued game states:', time() - start_time)
 
-    threads = []
+    #evaluator = neat.threaded.ThreadedEvaluator(10, evaluate_genome)
+    #evaluator.evaluate(genomes, config)
+
     for genome_id, genome in genomes:
-
-        def job():
-            print('Thread for genome {id} started.'.format(
-                id=genome_id
-            ))
-            fitness = evaluate_genome(genome, config)
-
-            print('Fitness of genome {id}: {fitness}'.format(
-                id=genome_id,
-                fitness=fitness
-            ))
-        job()
-
-    '''
-        thread = Thread(target=job)
-        threads.append(thread)
-        thread.name = 'Fred'
-        thread.start()
-        sleep(5)
-
-    # wait for all genomes to be tested
-    time_started_waiting = time()
-    for thread in threads:
-        time_remaining = 11.0 - (time() - time_started_waiting)
-        if time_remaining > 0:
-            # wait for the thread to be done
-            # after 11 seconds just dont care about it anymore
-            # and just kill it next time we need an environment
-            thread.join(time_remaining)
-    '''
+        fitness = evaluate_genome(genome, config)
 
 def run(config_file):
     global game_states, GAME_STATE_MEMORY_FILEPATH
@@ -230,7 +203,7 @@ def run(config_file):
     print('time taken: create population', time() - start_time)
     '''
     start_time = time()
-    p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-12')
+    p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-18')
     print('time taken: restore checkpoint', time() - start_time)
 
     start_time = time()
