@@ -10,7 +10,7 @@ import gym_piranhas
 import numpy as np
 from time import time, sleep
 import random
-
+import pickle
 # start the client-server communication
 host = '127.0.0.1'
 port = 13050
@@ -18,9 +18,28 @@ port = 13050
 game_environments = []
 client_creation_lock = Lock()
 
-MEMORY_SIZE = 1e6
-game_states = []
+MEMORY_SIZE_PER_TURN = 1e3
+game_states = {}
 queued_game_states = []
+
+GAME_STATE_MEMORY_FILEPATH = './game_state_memory.data'
+
+def load_data(filepath, debug=True):
+    if debug:
+        print('Loading data from {}'.format(filepath))
+    with open(filepath, 'rb') as file:
+        data = pickle.load(file)
+        if debug:
+            print('Loaded data from {}'.format(filepath))
+        return data
+
+def store_data(data, filepath, debug=True):
+    if debug:
+        print('Storing data in {}'.format(filepath))
+    with open(filepath, 'wb') as file:
+        pickle.dump(data, file)
+        if debug:
+            print('Stored data in {}'.format(filepath))
 
 def get_inactive_environment():
     print('waiting for client_creation_lock')
@@ -91,28 +110,30 @@ def evaluate_genome(genome, config):
         env.simulation_is_active = True
         additional_fitness = 0.
 
-        for i, (game_state, _, _, stored_reward, _) in enumerate(game_states):
-            if i % 100 == 0:
-                print('.', end='' if i % 80 != 0 else '\n')
+        for turn, game_states_for_turn in game_states.items():
+            print('Turn {}:'.format(turn), end=' ')
+            for i, (game_state, _, _, stored_reward, _) in enumerate(game_states_for_turn):
+                if i % 10 == 0:
+                    print('.', end='' if i % 80 != 0 else '\n')
 
-            observation = env.reset(game_state)
+                observation = env.reset(game_state)
 
-            action = net.activate(observation)
+                action = net.activate(observation)
 
-            # action has to be a number from 0 to 799 (10 * 10 * 8)
-            action = np.array(action)
-            action = np.argmax(action)
+                # action has to be a number from 0 to 799 (10 * 10 * 8)
+                action = np.array(action)
+                action = np.argmax(action)
 
-            _, reward, done, _ = env.step(action)
-            if reward > stored_reward:
-                game_states[i] = (
-                    game_state,
-                    action,
-                    env.currentGameState,
-                    reward,
-                    done
-                )
-            additional_fitness += reward
+                _, reward, done, _ = env.step(action)
+                if reward > stored_reward:
+                    game_states_for_turn[turn][i] = (
+                        game_state,
+                        action,
+                        env.currentGameState,
+                        reward,
+                        done
+                    )
+                additional_fitness += reward
 
         genome.fitness += 9 * (additional_fitness / number_of_trainings)
         print('\ndone')
@@ -121,13 +142,31 @@ def evaluate_genome(genome, config):
 
 def eval_genomes(genomes, config):
     global game_states, queued_game_states
+
+    start_time = time()
     # new episode has begun
     # -> add all the experienced game_states to the training set
-    game_states += queued_game_states
-    queued_game_states = []
+    for queued_game_state in queued_game_states:
+        turn = queued_game_state[0].turn
+        if turn not in game_states:
+            game_states[turn] = []
 
-    if len(game_states) > MEMORY_SIZE:
-        game_states = random.sample(game_states, MEMORY_SIZE)
+        # TODO: filter for too many equal moves
+
+        # don't let the memory take on arbitrary size
+        count = len(game_states[turn])
+        if count >= MEMORY_SIZE_PER_TURN:
+            game_states[turn] = random.sample(game_states[turn], MEMORY_SIZE_PER_TURN - 1)
+
+        # append the current game state
+        game_states[turn].append(queued_game_state)
+
+    queued_game_states = []
+    print('time taken -> add queued game states:', time() - start_time)
+
+    start_time = time()
+    store_data(game_states, GAME_STATE_MEMORY_FILEPATH)
+    print('time taken -> store queued game states:', time() - start_time)
 
     threads = []
     for genome_id, genome in genomes:
@@ -176,6 +215,9 @@ def run(config_file):
     p = neat.Population(config)
     print('population created')
 
+    p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-12')
+    print('checkpoint restored')
+
     # Add a stdout reporter to show progress in the terminal.
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
@@ -197,7 +239,7 @@ def run(config_file):
         fitness=fitness
     ))
 
-    p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-4')
+    p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-12')
     p.run(eval_genomes, 10)
 
 

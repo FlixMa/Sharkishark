@@ -231,4 +231,29 @@ for i in range(0, 1000, 100):
     print(possible_moves[i:i+100])
 '''
 move = Move(4, 3, Direction.UP_LEFT)
-state.apply(move).printColored()
+
+import pickle
+
+def load_data(filepath, debug=False):
+    if debug:
+        print('Loading data from {}'.format(filepath))
+    with open(filepath, 'rb') as file:
+        data = pickle.load(file)
+        if debug:
+            print('Loaded data from {}'.format(filepath))
+        return data
+
+def store_data(data, filepath):
+    if debug:
+        print('Storing data in {}'.format(filepath))
+    with open(filepath, 'wb') as file:
+        pickle.dump(data, file)
+        if debug:
+            print('Stored data in {}'.format(filepath))
+
+FILEPATH_STATE = './pickled_state.data'
+FILEPATH_MOVE = './pickled_move.data'
+store_data(state, FILEPATH_STATE)
+store_data(move, FILEPATH_MOVE)
+
+load_data(FILEPATH_STATE).apply(load_data(FILEPATH_MOVE)).printColored()
