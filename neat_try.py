@@ -1,4 +1,5 @@
 import os
+import sys
 import neat
 #import visualize
 
@@ -104,17 +105,22 @@ def evaluate_genome(genome, config):
 
     print('game over')
 
-    number_of_trainings = len(game_states)
-    if number_of_trainings > 0:
+    number_of_turns = len(game_states)
+    if number_of_turns > 0:
         print('training from memory')
         env.simulation_is_active = True
         additional_fitness = 0.
 
+        number_of_trainings = 0
         for turn, game_states_for_turn in game_states.items():
-            print('Turn {}:'.format(turn), end=' ')
+            count = len(game_states_for_turn)
+            number_of_trainings += count
+            print('Turn {} - count {}:'.format(turn, count), end=' ')
+            fitness_this_turn = 0.
             for i, (game_state, _, _, stored_reward, _) in enumerate(game_states_for_turn):
                 if i % 10 == 0:
-                    print('.', end='' if i % 80 != 0 else '\n')
+                    print('.', end='')
+                    sys.stdout.flush()
 
                 observation = env.reset(game_state)
 
@@ -125,7 +131,7 @@ def evaluate_genome(genome, config):
                 action = np.argmax(action)
 
                 _, reward, done, _ = env.step(action)
-                if reward > stored_reward:
+                '''if reward > stored_reward:
                     game_states_for_turn[turn][i] = (
                         game_state,
                         action,
@@ -133,7 +139,11 @@ def evaluate_genome(genome, config):
                         reward,
                         done
                     )
+                '''
+                fitness_this_turn += reward
                 additional_fitness += reward
+            print(' ->', (fitness_this_turn / float(count)))
+
 
         genome.fitness += 9 * (additional_fitness / number_of_trainings)
         print('\ndone')
@@ -202,7 +212,10 @@ def eval_genomes(genomes, config):
     '''
 
 def run(config_file):
+    global game_states, GAME_STATE_MEMORY_FILEPATH
     # Load configuration.
+    '''
+    start_time = time()
     config = neat.Config(
         neat.DefaultGenome,
         neat.DefaultReproduction,
@@ -210,13 +223,20 @@ def run(config_file):
         neat.DefaultStagnation,
         config_file
     )
-    print('config loaded')
+    print('time taken: load config', time() - start_time)
     # Create the population, which is the top-level object for a NEAT run.
+    start_time = time()
     p = neat.Population(config)
-    print('population created')
-
+    print('time taken: create population', time() - start_time)
+    '''
+    start_time = time()
     p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-12')
-    print('checkpoint restored')
+    print('time taken: restore checkpoint', time() - start_time)
+
+    start_time = time()
+    game_states = load_data(GAME_STATE_MEMORY_FILEPATH)
+    print('time taken: restore replay memory', time() - start_time)
+
 
     # Add a stdout reporter to show progress in the terminal.
     p.add_reporter(neat.StdOutReporter(True))
