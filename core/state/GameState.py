@@ -8,83 +8,114 @@ class GameState():
         self.turn = None
         self.board = None
 
-    def calc_mean_distance_using_median_center(self, player_color):
-        fishes = np.argwhere(self.board == FieldState.fromPlayerColor(player_color))
-        median_coordinate = np.percentile(
-            fishes,
-            50,
-            axis=0,
-            interpolation='nearest'
-        )
+        self.fishes = {}
+        self.mean_distance = {}
+        self.num_fishes = {}
+        self.groups = {}
+        self.biggest_group = {}
 
-        squared_error = 0
-        for fish_coord in fishes:
-            squared_error += np.square(median_coordinate - fish_coord).sum()
-        return squared_error / len(fishes)
+    def get_fishes(self, player_color):
+        if player_color not in self.fishes:
+            self.fishes[player_color] = np.argwhere(self.board == FieldState.fromPlayerColor(player_color))
+        return self.fishes[player_color]
+
+    def calc_mean_distance_using_median_center(self, player_color):
+        if player_color not in self.mean_distance:
+            fishes = self.get_fishes(player_color)
+            median_coordinate = np.percentile(
+                fishes,
+                50,
+                axis=0,
+                interpolation='nearest'
+            )
+
+            squared_error = 0
+            for fish_coord in fishes:
+                squared_error += np.square(median_coordinate - fish_coord).sum()
+            mse = squared_error / len(fishes)
+            self.mean_distance[player_color] = mse
+
+        return self.mean_distance[player_color]
 
     def find_groups(self, player_color):
-        boolBoard = (self.board == FieldState.fromPlayerColor(player_color))
-        fishesToConsider = np.argwhere(boolBoard)
-        groups = []
+        '''
+            Finds all the groups of fishes belonging to a given player.
 
-        # calculate group for each starting position
-        while len(fishesToConsider) > 0:
-            fish = fishesToConsider[0]
+            Returns groups and for each fish their neighbor count, which is an indication for how well that group sticks together.
+        '''
 
-            # get neighborhood of chosen fish and iteratively do a flood-fill
-            fish_neighborhood = GameState.neighbors(fish[0], fish[1], boolBoard)
-            i = 0
-            while i < len(fish_neighborhood):
-                neighbor = fish_neighborhood[i]
+        # check if this has already been calculated
+        if player_color not in self.groups:
+            boolBoard = self.get_fishes(player_color)
+            fishesToConsider = np.argwhere(boolBoard)
+            groups = []
 
-                its_neighborhood = GameState.neighbors(neighbor[0], neighbor[1], boolBoard)
-                concatenated = np.concatenate((fish_neighborhood, its_neighborhood))
-                fish_neighborhood = np.unique(concatenated, axis=0)
-                i += 1
+            # calculate group for each starting position
+            while len(fishesToConsider) > 0:
+                fish = fishesToConsider[0]
 
-            groups.append(fish_neighborhood)
+                # get neighborhood of chosen fish and iteratively do a flood-fill
+                fish_neighborhood = GameState.neighbors(fish[0], fish[1], boolBoard)
+                num_neighbors = {tuple(fish): len(fish_neighborhood)}
+                i = 0
+                while i < len(fish_neighborhood):
+                    neighbor = fish_neighborhood[i]
 
-            # remove all fishes in this group from the fishes to consider next round
-            remainingMask = ~(np.isin(list(map(lambda a: a[0] * 10 + a[1], fishesToConsider)),
-                                      list(map(lambda a: a[0] * 10 + a[1], fish_neighborhood))))
-            fishesToConsider = fishesToConsider[remainingMask]
+                    its_neighborhood = GameState.neighbors(neighbor[0], neighbor[1], boolBoard)
+                    num_neighbors[tuple(neighbor)] = len(its_neighborhood)
+                    concatenated = np.concatenate((fish_neighborhood, its_neighborhood))
+                    fish_neighborhood = np.unique(concatenated, axis=0)
+                    i += 1
 
-        return groups
+                groups.append((fish_neighborhood, num_neighbors))
+
+                # remove all fishes in this group from the fishes to consider next round
+                remainingMask = ~(np.isin(list(map(lambda a: a[0] * 10 + a[1], fishesToConsider)),
+                                          list(map(lambda a: a[0] * 10 + a[1], fish_neighborhood))))
+                fishesToConsider = fishesToConsider[remainingMask]
+            self.groups[player_color] = groups
+
+        return self.groups[player_color]
 
     def get_biggest_group(self, player_color):
+        if player_color in self.biggest_group:
+            return self.biggest_group[player_color]
         groups = self.find_groups(player_color)
         largestGroup = None
         largestSize = 0
-        for group in groups:
+        for group, neighborhood in groups:
             size = len(group)
             if largestSize < size:
                 largestSize = size
-                largestGroup = group
+                largestGroup = (group, neighborhood)
 
+        self.biggest_group[player_color] = largestGroup
         return largestGroup
 
-    def apply(self, move):
+    def apply(self, move, debug=False):
+        assert(self.currentPlayerColor is not None)
+        assert(self.turn is not None)
+        assert(self.board is not None)
+
         # next board?
-        is_valid, destination = move.validate(self)
+        is_valid, destination = move.validate(self, player_color=self.currentPlayerColor, debug=debug)
         if not is_valid:
             return None
 
         next_game_state = GameState.copy(self)
 
-        if self.board is not None:
-            next_game_state.board[move.x, move.y] = FieldState.EMPTY
-            next_game_state.board[destination[0], destination[1]] = FieldState.fromPlayerColor(GameSettings.ourColor)
+        next_game_state.board[move.x, move.y] = FieldState.EMPTY
+        next_game_state.board[destination[0], destination[1]] = FieldState.fromPlayerColor(self.currentPlayerColor)
 
-        if self.currentPlayerColor is not None:
-            next_game_state.currentPlayerColor = self.currentPlayerColor.otherColor()
-
-        if self.turn is not None:
-            next_game_state.turn += 1
+        next_game_state.currentPlayerColor = self.currentPlayerColor.otherColor()
+        next_game_state.turn += 1
 
         return next_game_state
 
     def number_of_fishes(self, player_color):
-        return (self.board == FieldState.fromPlayerColor(player_color)).sum()
+        if player_color not in self.num_fishes:
+            self.num_fishes[player_color] = len(self.get_fishes(player_color))
+        return self.num_fishes[player_color]
 
     @staticmethod
     def neighbors(x, y, boolBoard):
@@ -104,8 +135,7 @@ class GameState():
 
         return neighbors
 
-
-    def estimate_reward(self, argument):
+    def estimate_reward(self, argument, player_color=None):
         next_game_state = None
         if isinstance(argument, GameState):
             next_game_state = argument
@@ -113,30 +143,33 @@ class GameState():
             # apply move to the board and check if it's valid
             next_game_state = self.apply(argument)
             if next_game_state is None:
-                return -100.0, True
+                return -100.0, True, None
         else:
             raise ValueError('Can\'t determine next game state to compare with. Argument is of invalid type. Expected GameState or Move. Got: ' + str(type(argument)))
 
-        our_current_mean_distance = self.calc_mean_distance_using_median_center(GameSettings.ourColor)
-        our_next_mean_distance = next_game_state.calc_mean_distance_using_median_center(GameSettings.ourColor)
+        if player_color is None:
+            player_color = GameSettings.ourColor
+
+        our_current_mean_distance = self.calc_mean_distance_using_median_center(player_color)
+        our_next_mean_distance = next_game_state.calc_mean_distance_using_median_center(player_color)
         our_distance_increase = our_next_mean_distance - our_current_mean_distance
 
-        their_current_mean_distance = self.calc_mean_distance_using_median_center(GameSettings.ourColor.otherColor())
-        their_next_mean_distance = next_game_state.calc_mean_distance_using_median_center(GameSettings.ourColor.otherColor())
+        their_current_mean_distance = self.calc_mean_distance_using_median_center(player_color.otherColor())
+        their_next_mean_distance = next_game_state.calc_mean_distance_using_median_center(player_color.otherColor())
         their_distance_increase = their_next_mean_distance - their_current_mean_distance
 
-        our_current_biggest_group = self.get_biggest_group(GameSettings.ourColor)
-        our_next_biggest_group = next_game_state.get_biggest_group(GameSettings.ourColor)
+        our_current_biggest_group, our_current_neighborhood = self.get_biggest_group(player_color)
+        our_next_biggest_group, our_current_neighborhood = next_game_state.get_biggest_group(player_color)
         our_group_increase = len(our_next_biggest_group) - len(our_current_biggest_group)
 
-        their_current_biggest_group = self.get_biggest_group(GameSettings.ourColor.otherColor())
-        their_next_biggest_group = next_game_state.get_biggest_group(GameSettings.ourColor.otherColor())
+        their_current_biggest_group, their_current_neighborhood = self.get_biggest_group(player_color.otherColor())
+        their_next_biggest_group, their_next_neighborhood = next_game_state.get_biggest_group(player_color.otherColor())
         their_group_increase = len(their_next_biggest_group) - len(their_current_biggest_group)
 
-        our_current_num_fishes = self.number_of_fishes(GameSettings.ourColor)
-        our_next_num_fishes = next_game_state.number_of_fishes(GameSettings.ourColor)
-        their_current_num_fishes = self.number_of_fishes(GameSettings.ourColor.otherColor())
-        their_next_num_fishes = next_game_state.number_of_fishes(GameSettings.ourColor.otherColor())
+        our_current_num_fishes = self.number_of_fishes(player_color)
+        our_next_num_fishes = next_game_state.number_of_fishes(player_color)
+        their_current_num_fishes = self.number_of_fishes(player_color.otherColor())
+        their_next_num_fishes = next_game_state.number_of_fishes(player_color.otherColor())
 
         # the more fishes are united the closer we are to winning
         our_group_union_fraction = float(len(our_next_biggest_group)) / our_next_num_fishes
@@ -155,7 +188,8 @@ class GameState():
         # TODO rewards for swarm disrupted, Strafe for fish eaten, look at opponent's reward
         return (
             group_reward + distance_reward + group_increase_reward,
-            next_game_state.turn >= 60
+            next_game_state.turn >= 60,
+            next_game_state
         )
 
 

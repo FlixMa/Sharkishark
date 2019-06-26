@@ -13,7 +13,7 @@ class Move():
         return "Move(({}, {}) in direction {})".format(
             self.x, self.y, self.direction)
 
-    def validate(self, game_state, debug=False):
+    def validate(self, game_state, player_color=None, debug=False):
             '''
                 Returns a tuple:
                 1. flag, if move is valid
@@ -26,6 +26,9 @@ class Move():
             if game_state.board is None:
                 raise ValueError('No board found.')
 
+            if player_color is None:
+                player_color = GameSettings.ourColor
+
             board = game_state.board
 
             '''
@@ -37,11 +40,16 @@ class Move():
                 4. our fish does not jump over a opponent's fish
             '''
 
-            ourFishFieldState = FieldState.fromPlayerColor(GameSettings.ourColor)
-
+            ourFishFieldState = FieldState.fromPlayerColor(player_color)
             if not (board[self.x, self.y] == ourFishFieldState):
                 if debug:
-                    print('Can\'t mind control the opponents fishes :(')
+                    game_state.printColored(highlight=[(self.x, self.y)])
+                    if board[self.x, self.y] == FieldState.EMPTY:
+                        print('This field is empty!')
+                    elif board[self.x, self.y] == FieldState.OBSTRUCTED:
+                        print('Can\'t control kraken!')
+                    else:
+                        print('Can\'t mind control the opponents fishes :(')
                 return False, None
 
             # count fishes in that row

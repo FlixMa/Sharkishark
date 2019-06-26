@@ -1,6 +1,7 @@
 import numpy as np
 import subprocess
 import operator
+from time import time
 from core.communication import GameClient
 from core.logic import GameLogicDelegate
 from core.util import FieldState, PlayerColor, Direction, Move
@@ -26,12 +27,12 @@ class RewardDrivenClient(GameLogicDelegate):
         # numpy random object
         self.np_random = None
 
-    def make_new_game(self):
+    def make_new_game(self, start_opponent=False):
         self.game_client = GameClient(self.host, self.port, self)
         self.game_client.start()
         self.game_client.join(self.reservation)
 
-        if self.autoplay:
+        if start_opponent or self.autoplay:
             # start opponent
             subprocess.Popen(
                 self.opponents_executable.format(host=self.host, port=self.port),
@@ -44,24 +45,78 @@ class RewardDrivenClient(GameLogicDelegate):
     # Overridden methods inherited from GameLogicDelegate
 
     def onGameStateUpdate(self, game_state):
-        super().onGameStateUpdate(game_state)
+        #super().onGameStateUpdate(game_state)
         self.currentGameState = GameState.copy(game_state)
 
     def onMoveRequest(self):
-        super().onMoveRequest()
+        #super().onMoveRequest()
+        start_time = time()
+
         if self.currentGameState is None:
             print('[env] there is no field')
             return None
-        else:
-            our_fishes = np.argwhere(self.currentGameState.board == FieldState.fromPlayerColor(GameSettings.ourColor))
-            estimated_rewards = {}  # dict of (move, reward)
-            for fish in our_fishes:
-                for dir in Direction:
-                    move = Move(fish[0], fish[1], dir)
-                    estimated_rewards[move] = self.currentGameState.estimate_reward(move)
 
-            best_move = max(estimated_rewards.items(), key=operator.itemgetter(1))
-            return best_move[0]
+        our_fishes = self.currentGameState.get_fishes(GameSettings.ourColor)
+        estimated_rewards = {}  # dict of (move, reward)
+        for fish in our_fishes:
+            for dir in Direction:
+                move = Move(fish[0], fish[1], dir)
+                game_state = self.currentGameState.apply(move)
+                if game_state is None:
+                    # this move was invalid
+                    continue
+                their_fishes = game_state.get_fishes(GameSettings.ourColor.otherColor())
+
+                possible_rewards = []
+                for their_fish in their_fishes:
+                    for their_dir in Direction:
+                        their_move = Move(their_fish[0], their_fish[1], their_dir)
+                        next_game_state = game_state.apply(their_move)
+                        if next_game_state is None:
+                            # this move was invalid
+                            return
+                        reward, done, _ = self.currentGameState.estimate_reward(next_game_state)
+                        possible_rewards.append(reward)
+
+                estimated_rewards[move] = np.array(possible_rewards)
+
+        worst_case_move = None
+        highest_worst_case_reward = None
+
+        best_case_move = None
+        highest_best_case_reward = None
+
+        typical_move = None
+        highest_typical_reward = None
+        for move, possible_rewards in estimated_rewards.items():
+            typical_reward = possible_rewards.mean()
+            best_case_reward = possible_rewards.max()
+            worst_case_reward = possible_rewards.min()
+
+            if highest_typical_reward is None or typical_reward > highest_typical_reward:
+                typical_move = move
+                highest_typical_reward = typical_reward
+
+            if highest_best_case_reward is None or best_case_reward > highest_best_case_reward:
+                best_case_move = move
+                highest_best_case_reward = best_case_reward
+
+            if highest_worst_case_reward is None or worst_case_reward > highest_worst_case_reward:
+                worst_case_move = move
+                highest_worst_case_reward = worst_case_reward
+
+        print(
+        '''[env] Sending move after {:.3f} seconds. Expected Reward:
+            Typical:    {:10.2f} {}
+            Best Case:  {:10.2f} {}
+            Worst Case: {:10.2f} {}
+        '''.format(
+            time()-start_time,
+            highest_typical_reward, typical_move,
+            highest_best_case_reward, best_case_move,
+            highest_worst_case_reward, worst_case_move
+        ))
+        return typical_move
 
     def onGameResult(self, result, cause, description):
         print("[env] Received gameResult '({}, {})'".format(result, cause))
@@ -71,29 +126,6 @@ class RewardDrivenClient(GameLogicDelegate):
         if self.autoplay:
             self.make_new_game()
         return True
-
-    # Helper methods
-    @staticmethod
-    def convert_game_state(game_state):
-        if GameSettings.ourColor != GameSettings.startPlayerColor:
-            # we normalize the board so that we are always the starting player
-            # who has fishes on the left and right hand side
-            game_state.board = np.rot90(game_state.board)
-
-        observation = np.zeros((10 * 10 * (8 + 2)), dtype=np.bool)
-        positions = np.argwhere(game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor))
-
-        dir_enumerated = list(enumerate(Direction))
-        for x, y in positions:
-            for i, dir in dir_enumerated:
-                move = Move(x, y, dir)
-                idx = (x + (y * 10)) * 8 + i
-                observation[idx] = move.validate(game_state)[0]
-
-        observation[-200:-100] = (game_state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor())).flatten()
-        observation[-100:] = (game_state.board == FieldState.OBSTRUCTED).flatten()
-
-        return observation
 
     def calc_reward(self, previous_game_state):
         if self.result == GameResult.WON and \
