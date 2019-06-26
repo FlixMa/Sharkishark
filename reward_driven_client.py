@@ -9,37 +9,36 @@ from core.state import GameSettings, GameResult, GameResultCause, GameState
 
 class RewardDrivenClient(GameLogicDelegate):
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, reservation, autoplay=False):
         # members from GameLogicDelegate
         super(GameLogicDelegate).__init__()
         self.reset_callback = None
         self.result = None
         self.cause = None
+        self.autoplay = autoplay
 
         self.game_client = None
         self.host = host
         self.port = port
+        self.reservation = reservation
         self.opponents_executable = "java -jar ../piranhas-not-so-simple-client-19.2.1.jar --host {host} --port {port}"
 
         # numpy random object
         self.np_random = None
 
-    def set_reset_callback(self, reset_callback):
-        self.reset_callback = reset_callback
-
-    def set_debug(self, debug):
-        self.debug = True if debug else False
-
     def make_new_game(self):
         self.game_client = GameClient(self.host, self.port, self)
         self.game_client.start()
-        self.game_client.join()
-        subprocess.Popen(
-            self.opponents_executable.format(host=self.host, port=self.port),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            shell=True
-         )
+        self.game_client.join(self.reservation)
+
+        if self.autoplay:
+            # start opponent
+            subprocess.Popen(
+                self.opponents_executable.format(host=self.host, port=self.port),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=True
+             )
         self.game_client.wait_until_stopped()
 
     # Overridden methods inherited from GameLogicDelegate
@@ -69,7 +68,8 @@ class RewardDrivenClient(GameLogicDelegate):
         self.result = result
         self.cause = cause
 
-        self.make_new_game()
+        if self.autoplay:
+            self.make_new_game()
         return True
 
     # Helper methods
@@ -110,6 +110,6 @@ class RewardDrivenClient(GameLogicDelegate):
 
 
 if __name__ == "__main__":
-    client = RewardDrivenClient('127.0.0.1', 13050)
+    client = RewardDrivenClient('127.0.0.1', 13050, None, True)
 
     client.make_new_game()

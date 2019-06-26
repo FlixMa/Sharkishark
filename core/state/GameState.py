@@ -138,7 +138,7 @@ class GameState():
         their_current_num_fishes = self.number_of_fishes(GameSettings.ourColor.otherColor())
         their_next_num_fishes = next_game_state.number_of_fishes(GameSettings.ourColor.otherColor())
 
-        # the more fishes are united the closes we are to winning
+        # the more fishes are united the closer we are to winning
         our_group_union_fraction = float(len(our_next_biggest_group)) / our_next_num_fishes
         their_group_union_fraction = float(len(their_next_biggest_group)) / their_next_num_fishes
         group_is_swarmier_reward = (10.0 if our_group_union_fraction > their_group_union_fraction else -10.0)
@@ -146,12 +146,13 @@ class GameState():
         # if its getting to a draw situation, its just necessary to have more fishes unioned than the other player
         group_has_more_fishes_reward = (10.0 if len(our_next_biggest_group) > len(their_next_biggest_group) else -10.0)
 
-        game_progress = (self.turn / 60.0) ** 3
+        game_progress = (self.turn / 60.0) ** 5
         group_reward = (1 - game_progress) * group_is_swarmier_reward + game_progress * group_has_more_fishes_reward
 
         distance_reward = their_distance_increase - our_distance_increase
         group_increase_reward = our_group_increase - their_group_increase
 
+        # TODO rewards for swarm disrupted, Strafe for fish eaten, look at opponent's reward
         return (
             group_reward + distance_reward + group_increase_reward,
             next_game_state.turn >= 60
