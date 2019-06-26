@@ -4,3 +4,5 @@ __pycache__
 neat_simple
 neat-checkpoint*
 *.data
+*/gym_piranhas.egg-info/*
+*.pyc
