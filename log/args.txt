@@ -1,7 +1,0 @@
-sys.argv: ['./starter.py', '--host', 'localhost', '--port', '13051']
-
-
- parser:
-	host: 'localhost' (<class 'str'>)
-	port: 13051 (<class 'int'>)
-	reservation code: None (<class 'NoneType'>)
