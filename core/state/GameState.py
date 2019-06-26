@@ -111,7 +111,7 @@ class GameState():
             next_game_state = argument
         elif isinstance(argument, Move):
             # apply move to the board and check if it's valid
-            next_game_state = self.apply(move)
+            next_game_state = self.apply(argument)
             if next_game_state is None:
                 return -100.0, True
         else:

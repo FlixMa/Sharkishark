@@ -35,24 +35,6 @@ from core.state import GameState
 from core.util import FieldState, PlayerColor
 
 
-class PiranhasProcessor(Processor):
-
-    def process_state_batch(self, batch):
-        """
-        Given a state batch, I want to remove the second dimension, because it's
-        useless and prevents me from feeding the tensor into my CNN
-        """
-        return np.squeeze(batch, axis=1)
-
-    def process_reward(self, reward):
-        with open('./rewards.txt', 'a') as file:
-            file.write('%.3f\n' % float(reward))
-        return np.clip(reward, -100., 100.)
-
-# copied from https://github.com/keras-rl/keras-rl/blob/master/examples/dqn_atari.py
-# Add memory
-
-
 # https://stackoverflow.com/questions/47140642/what-does-the-episodeparametermemory-of-keras-rl-do
 # for explanation of parameters
 memory = SequentialMemory(limit=10000, window_length=1)  # TODO WINDOW_LENGTH
