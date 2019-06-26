@@ -57,28 +57,42 @@ class RewardDrivenClient(GameLogicDelegate):
             return None
 
         our_fishes = self.currentGameState.get_fishes(GameSettings.ourColor)
+
+
         estimated_rewards = {}  # dict of (move, reward)
-        for fish in our_fishes:
-            for dir in Direction:
-                move = Move(fish[0], fish[1], dir)
-                game_state = self.currentGameState.apply(move)
+        for our_fish in our_fishes:
+            for our_dir in Direction:
+                our_move = Move(our_fish[0], our_fish[1], our_dir)
+                #game_state = self.currentGameState.apply(our_move)
+                reward, done, game_state = self.currentGameState.estimate_reward(our_move)
                 if game_state is None:
                     # this move was invalid
                     continue
-                their_fishes = game_state.get_fishes(GameSettings.ourColor.otherColor())
 
-                possible_rewards = []
-                for their_fish in their_fishes:
-                    for their_dir in Direction:
-                        their_move = Move(their_fish[0], their_fish[1], their_dir)
-                        next_game_state = game_state.apply(their_move)
-                        if next_game_state is None:
-                            # this move was invalid
-                            return
-                        reward, done, _ = self.currentGameState.estimate_reward(next_game_state)
-                        possible_rewards.append(reward)
+                estimated_rewards[our_move] = (reward, done, game_state)
 
-                estimated_rewards[move] = np.array(possible_rewards)
+        estimated_rewards_sorted = sorted(estimated_rewards.items(), key=lambda x: -x[1][0])
+
+        estimated_rewards = {}
+        for move, (reward, done, game_state) in estimated_rewards_sorted:
+            if time() - start_time > 1:
+                break
+
+            possible_rewards = []
+            their_fishes = game_state.get_fishes(GameSettings.ourColor.otherColor())
+            for their_fish in their_fishes:
+                for their_dir in Direction:
+                    their_move = Move(their_fish[0], their_fish[1], their_dir)
+                    next_game_state = game_state.apply(their_move)
+                    if next_game_state is None:
+                        # this move was invalid
+                        continue
+
+                    reward, done, _ = self.currentGameState.estimate_reward(next_game_state)
+                    possible_rewards.append(reward)
+
+            possible_rewards = np.array(possible_rewards)
+            estimated_rewards[move] = (possible_rewards.mean(), possible_rewards.max(), possible_rewards.min())
 
         worst_case_move = None
         highest_worst_case_reward = None
@@ -88,10 +102,7 @@ class RewardDrivenClient(GameLogicDelegate):
 
         typical_move = None
         highest_typical_reward = None
-        for move, possible_rewards in estimated_rewards.items():
-            typical_reward = possible_rewards.mean()
-            best_case_reward = possible_rewards.max()
-            worst_case_reward = possible_rewards.min()
+        for move, (typical_reward, best_case_reward, worst_case_reward) in estimated_rewards.items():
 
             if highest_typical_reward is None or typical_reward > highest_typical_reward:
                 typical_move = move
