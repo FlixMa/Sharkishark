@@ -16,6 +16,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
     def __init__(self):
         # members from gym.Env
         self.name = 'piranhas'
+        self.debug = False
 
         # full steam ahead
         self.action_space = spaces.Box(
@@ -38,14 +39,18 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.reset_callback = None
         self.result = None
         self.cause = None
+        self.is_stopped = False
 
         # numpy random object
         self.np_random = None
 
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.DEBUG)
 
     def set_reset_callback(self, reset_callback):
         self.reset_callback = reset_callback
+
+    def set_stopped(self):
+        self.is_stopped = True
 
     # Overridden methods inherited from gym.Env
     def seed(self, seed=None):
@@ -117,7 +122,8 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         if not valid:
             logging.debug("[env] Chosen fish is invalid. ")
             self.move_request_event.set()  # to not get stuck above
-            return self.observation, -10., self.result is not None, {'locally_validated': False}
+            done = self.result is not None or (self.result == GameResult.LOST and self.cause != GameResultCause.REGULAR)
+            return self.observation, -100., done or self.is_stopped, {'locally_validated': False}
 
         # check if move is valid
         # -> let the net redo the step action if not
@@ -128,16 +134,15 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
             valid, destination = PiranhasEnv.validate_move(self.global_move, self.currentGameState)
             if not valid:
                 logging.debug("[env] Move is invalid. ")
-                self.move_request_event.set() # to not get stuck above
-                return self.observation, -10., self.result is not None, {'locally_validated': False}
+                self.move_request_event.set()  # to not get stuck above
+                done = self.result is not None or (self.result == GameResult.LOST and self.cause != GameResultCause.REGULAR)
+                return self.observation, -100., done or self.is_stopped, {'locally_validated': False}
 
         # remember the last game state for reward
-        print("before: {}".format(hash(str(self.currentGameState.board))))
         previous_game_state = self.currentGameState
         self.move_decision_taken_event.set()  # onMoveRequest listens for this event
         logging.debug("[env] Move decision set. ")
 
-        print("after: {}".format(hash(str(self.currentGameState.board))))
         # wait until game state has been reported
         # what the opponent did -> calc reward based on that too
         logging.debug("[env] Waiting for game state update ... ")
@@ -151,7 +156,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         print("\n[env] Reward: {:.2f}; GameResult: {}; Cause: {}".format(
             reward, self.result, self.cause))
 
-        return self.observation, reward, done, {'locally_validated': True}
+        return self.observation, reward, done or self.is_stopped, {'locally_validated': True}
 
     def reset(self):
         """
@@ -163,6 +168,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         self.currentGameState = None
         self.result = None
         self.cause = None
+        self.is_stopped = False
         self.game_state_update_event.clear()
         self.move_request_event.clear()
         self.move_decision_taken_event.clear()
@@ -219,9 +225,8 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
     # Overridden methods inherited from GameLogicDelegate
 
     def onGameStateUpdate(self, game_state):
-        super().onGameStateUpdate(game_state)
+        #super().onGameStateUpdate(game_state)
         self.currentGameState = GameState.copy(game_state)
-        print("onGameStateUpdate: {}".format(hash(str(self.currentGameState.board))))
 
         if GameSettings.ourColor != GameSettings.startPlayerColor:
             # we normalize the board so that we are always the starting player
@@ -259,7 +264,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         logging.debug("[env] Preprocessing done.")
 
     def onMoveRequest(self):
-        super().onMoveRequest()
+        #super().onMoveRequest()
         if self.currentGameState is None:
             logging.debug('[env] there is no field')
             return None
@@ -275,6 +280,7 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
     def onGameResult(self, result, cause, description):
         logging.debug("[env] Received gameResult '({}, {})'".format(result, cause))
+        super().onGameResult(result, cause, description)
         self.result = result
         self.cause = cause
         # hide this as a game state
@@ -286,8 +292,9 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
     # Helper methods
     @staticmethod
     def retrieve_move(action, observation, rotate=False):
-        fish_idx = int(np.clip(action[0], 0, 15))
-        direction = Direction.fromInt(int(np.clip(action[1], 0, 7)))
+
+        fish_idx = int(np.clip(action[0] * 15.999, 0, 15.999))
+        direction = Direction.fromInt(int(np.clip(action[1] * 7.999, 0, 7.999)))
 
         fish_to_move_coord = np.argwhere(observation[fish_idx] == -1)
         if len(fish_to_move_coord) == 0:
@@ -354,7 +361,6 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
         ourFishFieldState = FieldState.fromPlayerColor(GameSettings.ourColor)
 
         if not (board[move.x, move.y] == ourFishFieldState):
-            logging.debug('Can\'t mind control the opponents fishes :(')
             return False, None
 
         # count fishes in that row
@@ -380,37 +386,26 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
 
             current_position_on_axis = flippedX if move.y > flippedX else move.y
 
-        logging.debug('move' + move.direction.name + str((move.x, move.y)) + '-> axis: [ ')
-        for item in axis:
-            logging.debug(item.name + ' ')
-        logging.debug('], idx:' + str(current_position_on_axis))
-
         num_fishes = ((axis == FieldState.RED) | (axis == FieldState.BLUE)).sum()
-        logging.debug('-> fishlis:' + str(num_fishes))
 
         #  where do we wanna go?
         #  NOTE: y is upside down / inverted
         direction_forward = (move.direction in [Direction.UP, Direction.UP_LEFT, Direction.UP_RIGHT, Direction.RIGHT])
         destination_position_on_axis = (current_position_on_axis + num_fishes) if direction_forward else (current_position_on_axis - num_fishes)
-        logging.debug('direction_forward:' + str(direction_forward))
-        logging.debug('destination:' + str(destination_position_on_axis))
 
         # check for bounds
         if destination_position_on_axis < 0 or destination_position_on_axis >= axis.size:
-            logging.debug('Exceeding bounds. %d of %d' % (destination_position_on_axis, axis.size))
             return False, None
 
         # what type is that destination field?
         destinationFieldState = axis[destination_position_on_axis]
         if destinationFieldState == FieldState.OBSTRUCTED or destinationFieldState == ourFishFieldState:
-            logging.debug('Destination is obstructed or own fish:' + str(destinationFieldState))
             return False, None
 
         # is an opponents fish in between(! excluding the destiantion !)?
         opponentsFieldState = FieldState.RED if ourFishFieldState == FieldState.BLUE else FieldState.BLUE
         for idx in range(current_position_on_axis, destination_position_on_axis, 1 if direction_forward else -1):
             if axis[idx] == opponentsFieldState:
-                logging.debug('Can\'t jump over opponents fish.')
                 return False, None
 
         dest_x, dest_y = move.x, move.y
@@ -526,11 +521,11 @@ class PiranhasEnv(gym.Env, GameLogicDelegate):
     def calc_reward(self, previous_game_state):
         if self.result == GameResult.WON and \
                 self.cause == GameResultCause.REGULAR:
-            return 10, True
+            return 100, True
         elif self.result == GameResult.LOST and \
                 (self.cause == GameResultCause.REGULAR or
                  self.cause == GameResultCause.RULE_VIOLATION):
-            return -10, True
+            return -100, True
 
         # compare current board to last board
         own_fishes_previous = np.argwhere(

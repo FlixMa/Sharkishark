@@ -12,7 +12,7 @@ env.seed(123042)
 nb_actions = env.action_space.shape[0]
 
 from keras.models import Sequential, Model
-from keras.layers import Convolution2D, Convolution3D, Input, Concatenate, Flatten, Dense, Activation, Permute
+from keras.layers import SeparableConv2D, Input, Concatenate, Flatten, Dense, Activation, Permute
 from keras.optimizers import Adam
 import keras.backend as K
 
@@ -32,17 +32,13 @@ else:
     raise RuntimeError('Unknown image_dim_ordering')
 
 # The actual network structure
-# results in a (6 x 6 x 32) output volume
-actor.add(Convolution2D(64, (1, 1), activation='relu', data_format='channels_first'))
-# results in a (4 x 4 x 64) output volume
-actor.add(Convolution2D(128, (3, 3), activation='relu', data_format='channels_first'))
-# results in a (2 x 2 x 64) output volume
-actor.add(Convolution2D(128, (1, 1), activation='relu', data_format='channels_first'))
+actor.add(SeparableConv2D(64, (1, 1), activation='relu', data_format='channels_first'))
+actor.add(SeparableConv2D(128, (3, 3), activation='relu', data_format='channels_first'))
+actor.add(SeparableConv2D(64, (1, 1), activation='relu', data_format='channels_first'))
 # flattens the result (vector of size 256)
 actor.add(Flatten())
-actor.add(Dense(1024, activation='relu'))
 # add fully-connected layer
-actor.add(Dense(512, activation='relu'))
+#actor.add(Dense(1024, activation='relu'))
 actor.add(Dense(256, activation='relu'))
 # map to output: coordinates and move
 actor.add(Dense(nb_actions, activation='linear'))
@@ -83,7 +79,7 @@ class PiranhasProcessor(Processor):
         return np.squeeze(batch, axis=1)
 
     def process_reward(self, reward):
-        return np.clip(reward, -10., 10.)
+        return np.clip(reward, -100., 100.)
 
 # copied from https://github.com/keras-rl/keras-rl/blob/master/examples/dqn_atari.py
 # Add memory
@@ -108,8 +104,8 @@ agent = DDPGAgent(nb_actions=nb_actions,
                   critic=critic,
                   critic_action_input=action_input,
                   memory=memory,
-                  nb_steps_warmup_critic=50000,
-                  nb_steps_warmup_actor=50000,
+                  nb_steps_warmup_actor=500,
+                  nb_steps_warmup_critic=500,
                   processor=processor,
                   random_process=random_process,
                   gamma=.99,
@@ -128,13 +124,14 @@ port = 13050
 game_client = None
 
 
-def makeNewGame():
+def make_new_game():
+    print('Creating a new game')
     global game_client, host, port
 
     if game_client is not None:
         game_client.stop()
 
-    game_client = core.communication.GameClient(host, port, env)
+    game_client = core.communication.GameClient(host, port, env, env.set_stopped)
 
     game_client.start()  # connect to the server
     game_client.join()  # join a game
@@ -146,7 +143,6 @@ def makeNewGame():
                      stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL,
                      shell=True)
-
     """
     # Use own client
     game_client2 = core.communication.GameClient(host, port, env)
@@ -155,8 +151,7 @@ def makeNewGame():
     game_client2.join()  # join a game
     """
 
-
-env.set_reset_callback(makeNewGame)
+env.set_reset_callback(make_new_game)
 
 import os
 from rl.callbacks import FileLogger, ModelIntervalCheckpoint
@@ -167,17 +162,18 @@ if mode == 'train':
     # Okay, now it's time to learn something! We capture the interrupt exception so that training
     # can be prematurely aborted. Notice that now you can use the built-in Keras callbacks!
     weights_filename = 'dqn_{}_weights.h5f'.format(env.name)
+    agent_filename = 'dqn_{}_weights_actor.h5f'.format(env.name)
+    critic_filename = 'dqn_{}_weights_critic.h5f'.format(env.name)
     checkpoint_weights_filename = 'dqn_' + env.name + '_weights_{step}.h5f'
     log_filename = 'dqn_{}_log.json'.format(env.name)
-    if os.path.exists(weights_filename):
-        dqn.load_weights(weights_filename)
     # Add a checkpoint every 250000 iterations
     callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=250000)]
     # log to file every 100 iterations
     callbacks += [FileLogger(log_filename, interval=100)]
-    if os.path.exists(weights_filename):
-        agent.load_weights(weights_filename)
-    agent.fit(env, callbacks=callbacks, nb_steps=1000000000, log_interval=10000)
+    # if os.path.exists(agent_filename) and os.path.exists(critic_filename):
+    #    print('Loading weights')
+    #    agent.load_weights(weights_filename)
+    agent.fit(env, callbacks=callbacks, nb_steps=1000000000, log_interval=1000)
 
     # After training is done, we save the final weights one more time.
     agent.save_weights(weights_filename, overwrite=True)

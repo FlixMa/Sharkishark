@@ -50,11 +50,12 @@ class StoppableThread(threading.Thread):
 
 class AsynchronousSocketClient(StoppableThread):
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, stop_callback):
         super().__init__()
 
         self.sock = socket.socket()
         self.sock.connect((host, port))
+        self.stop_callback = stop_callback
 
     def run(self):
         self.sock.settimeout(0.5)
@@ -83,5 +84,7 @@ class AsynchronousSocketClient(StoppableThread):
 
         while not self.is_stopped():
             pass
+
+        self.stop_callback()
 
         self.sock.close()

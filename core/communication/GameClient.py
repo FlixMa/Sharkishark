@@ -5,8 +5,8 @@ from ..state import GameSettings
 
 class GameClient(AsynchronousSocketClient):
 
-    def __init__(self, host, port, gameLogicDelegate):
-        super().__init__(host, port)
+    def __init__(self, host, port, gameLogicDelegate, stop_callback):
+        super().__init__(host, port, stop_callback)
         self.gameLogicDelegate = gameLogicDelegate
 
     def onMessage(self, message):
@@ -49,6 +49,6 @@ class GameClient(AsynchronousSocketClient):
         #self.socket.send(message: "<room roomId=\"\(self.roomId!)\">\(mv)</room>")
         hintsXML = '<hint content="noch ein Hint" />'
         message = '<room roomId="%s"><data class="move" x="%d" y="%d" direction="%s">%s</data></room>' % (roomId, posX, posY, directionString, hintsXML)
-        print('\nsending:', message, '\n')
+        #print('\nsending:', message, '\n')
 
         self.send(message)
