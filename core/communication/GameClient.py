@@ -3,6 +3,7 @@ from ..logic import GameLogicDelegate
 from ..parsing import Parser
 from ..state import GameSettings
 
+
 class GameClient(AsynchronousSocketClient):
 
     def __init__(self, host, port, gameLogicDelegate):

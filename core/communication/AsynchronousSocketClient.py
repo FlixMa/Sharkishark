@@ -47,7 +47,6 @@ class StoppableThread(threading.Thread):
         self._stop_event.wait()
 
 
-
 class AsynchronousSocketClient(StoppableThread):
 
     def __init__(self, host, port):

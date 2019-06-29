@@ -58,12 +58,11 @@ class RewardDrivenClient(GameLogicDelegate):
 
         our_fishes = self.currentGameState.get_fishes(GameSettings.ourColor)
 
-
         estimated_rewards = {}  # dict of (move, reward)
         for our_fish in our_fishes:
             for our_dir in Direction:
                 our_move = Move(our_fish[0], our_fish[1], our_dir)
-                #game_state = self.currentGameState.apply(our_move)
+                # game_state = self.currentGameState.apply(our_move)
                 reward, done, game_state = self.currentGameState.estimate_reward(our_move)
                 if game_state is None:
                     # this move was invalid
