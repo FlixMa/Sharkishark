@@ -36,7 +36,6 @@ class StoppableThread(threading.Thread):
             pass
 
 
-
 class AsynchronousSocketClient(StoppableThread):
 
     def __init__(self, host, port):
