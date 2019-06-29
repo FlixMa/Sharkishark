@@ -6,21 +6,9 @@ def receive(sock, debug=False):
     data = bytearray()
     try:
         while 1:
-            b = sock.recv(1)
-            if not b:
-                if len(data) == 0:
-                    raise socket.error('no data received')
-                else:
-                    print('last data:', repr(bytes(data).decode('utf-8')))
-                    break
-            data.append(b[0])
-    except socket.timeout:
-        if debug and message != '':
-            message = bytes(data).decode('utf-8')
-            with open('./log/socket.txt', 'a') as socketLogFile:
-                socketLogFile.write(datetime.now().isoformat() + '\n')
-                socketLogFile.write(message)
-                socketLogFile.write('\n\n')
+            data += sock.recv(1)
+    except socket.error:
+        pass
     except Exception as ex:
         print('exception in receive: ', repr(ex))
         print('data on exception:', repr(bytes(data).decode('utf-8')))
@@ -44,7 +32,8 @@ class StoppableThread(threading.Thread):
         return self._stop_event.is_set()
 
     def wait_until_stopped(self):
-        self._stop_event.wait()
+        while self.isAlive() and not self._stop_event.wait(0.5):
+            pass
 
 
 
@@ -57,7 +46,7 @@ class AsynchronousSocketClient(StoppableThread):
         self.sock.connect((host, port))
 
     def run(self):
-        self.sock.settimeout(0.5)
+        self.sock.setblocking(0)
         with self.sock:
             while not self.is_stopped():
                 try:

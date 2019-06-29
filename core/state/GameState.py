@@ -1,6 +1,7 @@
 from core.util import FieldState, Move
 from core.state import GameSettings
 import numpy as np
+from enum import Enum
 
 class GameState():
     def __init__(self):
@@ -235,7 +236,9 @@ class GameState():
                 row = printing[y]
                 stringRepresentation += '\n' + ' ' * 8
                 for x, item in enumerate(row):
-                    temp = str(item.value)
+                    temp = str(None)
+                    if isinstance(item, Enum):
+                        temp = str(item.value)
 
                     if colored:
                         if tuple([x, y]) in list(map(lambda a: tuple((a[0], a[1])), highlight)):
