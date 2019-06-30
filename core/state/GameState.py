@@ -197,38 +197,54 @@ class GameState():
         group_increase_reward = our_group_increase - their_group_increase
 
 
-        win_lose_reward = 0
 
         # if opponent has already all fishes united and our move does
         # not eat one of his junction fishes (fishes which, if eaten, split the group into two)
         # -> give negative reward -30.0
-        if len(their_current_biggest_group) >= their_current_num_fishes:
-            if len(our_current_biggest_group) >= our_current_num_fishes:
-                pass
 
         # if we have already all fishes united and the opponents Move
         # does not eat one of our junction fishes
         # -> give positive reward +30.0
+        # were_unioned = len(our_current_biggest_group) >= our_current_num_fishes -> cant happen otherwise we would have won
+        theyre_unioned = len(their_current_biggest_group) >= their_current_num_fishes
+        were_unioning = len(their_next_biggest_group) >= their_next_num_fishes
+        theyre_unioning = len(their_next_biggest_group) >= their_next_num_fishes
 
-        # if throught the opponent has only one group left
-        # -> dont
-        '''
-        if len(their_next_biggest_group) >= their_next_num_fishes:
-            if len(our_next_biggest_group) >= our_next_num_fishes and our_next_num_fishes > their_next_num_fishes:
-                # everything's fine
+        this_could_be_the_final_move = opponent_did_move or player_color != GameSettings.startPlayerColor
+
+        win_lose_reward = 0
+        if this_could_be_the_final_move:
+            if were_unioning and (not theyre_unioning or our_next_num_fishes > their_next_num_fishes):
+                # if we are not the start player and we can union all fishes this turn
+                # and we have more as unioned fishes in comparison to the opponent
+                # -> do it
                 win_lose_reward = 100.0
-            else:
+            elif were_unioning and (not theyre_unioning or our_next_num_fishes >= their_next_num_fishes):
+                # if we are not the start player and we can union all fishes this turn
+                # and we have at least as much as the opponent
+                # -> do it
+                win_lose_reward = 60.0
+            elif theyre_unioned or theyre_unioning:
+                # if throught the opponent has only one group left
+                # -> dont
                 win_lose_reward = -100.0
-        '''
-        # if we are not the start player and we can union all fishes this turn
-        # -> do it
-        if len(our_next_biggest_group) >= our_next_num_fishes:
-            if opponent_did_move or player_color != GameSettings.startPlayerColor:
-                # the opponent has no chance to change anything anymore
-                win_lose_reward = 100.0
-            else:
-                # the opponent has a chance to change something so don't be so sure
-                win_lose_reward += 30.0
+        else:
+            if were_unioning and (not theyre_unioning or our_next_num_fishes > their_next_num_fishes):
+                # if we are the start player and we can union all fishes this turn
+                # -> at least we have a chance
+                win_lose_reward = 30.0
+            elif were_unioning and (not theyre_unioning or our_next_num_fishes >= their_next_num_fishes):
+                # if we are the start player and we can union all fishes this turn
+                # -> at least we have a chance
+                win_lose_reward = 18.0
+            elif theyre_unioned or theyre_unioning:
+                # if throught the opponent has only one group left
+                # -> dont
+                win_lose_reward = -100.0
+
+
+
+
 
         # TODO give reward if we isolate fish
         # TODO rewards for swarm disrupted, Strafe for fish eaten, look at opponent's reward

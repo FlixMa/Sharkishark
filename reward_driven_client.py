@@ -130,7 +130,7 @@ class RewardDrivenClient(GameLogicDelegate):
 
         print(
         '''[env] Sending move after {:.3f} seconds. Expected Reward:
-            Typical:    {:10.2f} {}
+         -> Typical:    {:10.2f} {}
             Best Case:  {:10.2f} {}
             Worst Case: {:10.2f} {}
         '''.format(
