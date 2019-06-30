@@ -1,4 +1,5 @@
 import numpy as np
+import string
 from bs4 import BeautifulSoup
 
 from ..state import *
@@ -6,7 +7,34 @@ from ..util import PlayerColor, FieldState
 
 LOG_COUNT = 0
 
+
 class Parser():
+
+    @staticmethod
+    def check_done_receiving(xml_string):
+        xml_string = xml_string.strip()
+
+        if xml_string == '':
+            return False
+
+        """xml_string = <room roomId="874850fa-7b9e-4f95-b3e1-fac2991a0f55">
+        <data class="memento">
+          <state class="sc.plugin2019.GameState" startPlayerColor="RED" currentPlayerColor="BLUE" turn="1">
+            <lastMove class="move" x="9" y="7" direction="UP_LEFT">
+              <hint content="noch ein Hint"/>
+            </lastMove>
+            <red displayName="Unknown" color="RED"/>
+            <blue displayName="Unknown" color="BLUE"/>
+            <board>
+              <fields>"""
+        soup = BeautifulSoup('<root>' + xml_string + '</root>', 'xml')
+
+        last_opened_tag = soup.root.contents[-1].name
+        if last_opened_tag == 'protocol':
+            last_opened_tag = soup.root.protocol.contents[-1].name
+
+        expected_closing_tag = "</" + last_opened_tag + ">"
+        return xml_string.endswith(expected_closing_tag)
 
     @staticmethod
     def parse(xml_string, lastGameState=None, debug=False):

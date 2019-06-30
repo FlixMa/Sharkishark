@@ -14,7 +14,8 @@ def main():
     parser.add_argument("-p", "--port", type=int, help="The port to connect to",
                         default=13050)
     parser.add_argument("-r", "--reservation", type=str, help="The reservation code")
-    parser.add_argument("--opponent", action='store_true', help="flag indicating whether an opponent is automatically started")
+    parser.add_argument("--opponent", action='store_true',
+                        help="Flag indicating whether an opponent is automatically started")
     args = parser.parse_args()
     print('Configuration:', args)
     client = RewardDrivenClient(args.host, args.port, args.reservation)
