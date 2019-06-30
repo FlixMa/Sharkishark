@@ -45,11 +45,11 @@ class RewardDrivenClient(GameLogicDelegate):
     # Overridden methods inherited from GameLogicDelegate
 
     def onGameStateUpdate(self, game_state):
-        #super().onGameStateUpdate(game_state)
+        super().onGameStateUpdate(game_state)
         self.currentGameState = GameState.copy(game_state)
 
     def onMoveRequest(self):
-        #super().onMoveRequest()
+        super().onMoveRequest()
         start_time = time()
 
         if self.currentGameState is None:
@@ -72,11 +72,9 @@ class RewardDrivenClient(GameLogicDelegate):
 
         estimated_rewards_sorted = sorted(estimated_rewards.items(), key=lambda x: -x[1][0])
 
-        estimated_rewards = {}
+        estimated_rewards_opponent = {}
+        time_exceeded = False
         for move, (reward, done, game_state) in estimated_rewards_sorted:
-            if time() - start_time > 1:
-                break
-
             possible_rewards = []
             their_fishes = game_state.get_fishes(GameSettings.ourColor.otherColor())
             for their_fish in their_fishes:
@@ -90,8 +88,23 @@ class RewardDrivenClient(GameLogicDelegate):
                     reward, done, _ = self.currentGameState.estimate_reward(next_game_state)
                     possible_rewards.append(reward)
 
+                    if time() - start_time > 1.4:
+                        time_exceeded = True
+                        break
+                if time_exceeded:
+                    break
+            if time_exceeded:
+                break
+
             possible_rewards = np.array(possible_rewards)
-            estimated_rewards[move] = (possible_rewards.mean(), possible_rewards.max(), possible_rewards.min())
+            estimated_rewards_opponent[move] = (possible_rewards.mean(), possible_rewards.max(), possible_rewards.min())
+
+        if len(estimated_rewards_opponent) >= 3:
+            estimated_rewards = estimated_rewards_opponent
+        else:
+            for move in estimated_rewards:
+                reward = estimated_rewards[move][0]
+                estimated_rewards[move] = (reward, reward, reward)
 
         worst_case_move = None
         highest_worst_case_reward = None

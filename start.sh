@@ -1,3 +1,4 @@
-#!/bin/sh
-chmod +x main.py
-./main.py "$@"
+#!/bin/bash
+parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+cd "$parent_path"
+python3 main.py "$@"

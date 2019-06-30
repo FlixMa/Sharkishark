@@ -6,3 +6,7 @@ neat-checkpoint*
 *.data
 */gym_piranhas.egg-info/*
 *.pyc
+bs4
+lxml
+log.txt
+*.zip
