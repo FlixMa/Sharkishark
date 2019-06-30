@@ -1,19 +1,23 @@
 import socket
 import threading
-from datetime import datetime
+from ..parsing import Parser
+
 
 def receive(sock, debug=False):
     data = bytearray()
-    try:
-        while 1:
+    while 1:
+        try:
             data += sock.recv(1)
-    except socket.error:
-        pass
-    except Exception as ex:
-        print('exception in receive: ', repr(ex))
-        print('data on exception:', repr(bytes(data).decode('utf-8')))
-        raise ex
-    return bytes(data).decode('utf-8')
+
+        except socket.error:
+            message = bytes(data).decode('utf-8')
+            if Parser.check_done_receiving(message):
+                return message
+
+        except Exception as ex:
+            print('exception in receive: ', repr(ex))
+            print('data on exception:', repr(bytes(data).decode('utf-8')))
+            raise ex
 
 
 class StoppableThread(threading.Thread):
@@ -50,8 +54,7 @@ class AsynchronousSocketClient(StoppableThread):
             while not self.is_stopped():
                 try:
                     message = receive(self.sock)
-                    if message != '':
-                        self.onMessage(message)
+                    self.onMessage(message)
                 except socket.error as ex:
                     self.stop()
                     print("remote peer closed the socket:", ex)
