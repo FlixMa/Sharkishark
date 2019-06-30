@@ -10,3 +10,5 @@ bs4
 lxml
 log.txt
 *.zip
+dist
+lxml-quadriga

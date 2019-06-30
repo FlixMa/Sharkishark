@@ -63,7 +63,7 @@ class RewardDrivenClient(GameLogicDelegate):
             for our_dir in Direction:
                 our_move = Move(our_fish[0], our_fish[1], our_dir)
                 # game_state = self.currentGameState.apply(our_move)
-                reward, done, game_state = self.currentGameState.estimate_reward(our_move)
+                reward, done, game_state = self.currentGameState.estimate_reward(our_move, opponent_did_move=False)
                 if game_state is None:
                     # this move was invalid
                     continue

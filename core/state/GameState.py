@@ -136,7 +136,7 @@ class GameState():
 
         return neighbors
 
-    def estimate_reward(self, argument, player_color=None):
+    def estimate_reward(self, argument, player_color=None, opponents_fishes_did_not_change=False, opponent_did_move=True):
         next_game_state = None
         if isinstance(argument, GameState):
             next_game_state = argument
@@ -156,7 +156,7 @@ class GameState():
         our_distance_increase = our_next_mean_distance - our_current_mean_distance
 
         their_current_mean_distance = self.calc_mean_distance_using_median_center(player_color.otherColor())
-        their_next_mean_distance = next_game_state.calc_mean_distance_using_median_center(player_color.otherColor())
+        their_next_mean_distance = their_current_mean_distance if opponents_fishes_did_not_change else next_game_state.calc_mean_distance_using_median_center(player_color.otherColor())
         their_distance_increase = their_next_mean_distance - their_current_mean_distance
 
         our_current_biggest_group, our_current_neighborhood = self.get_biggest_group(player_color)
@@ -164,13 +164,13 @@ class GameState():
         our_group_increase = len(our_next_biggest_group) - len(our_current_biggest_group)
 
         their_current_biggest_group, their_current_neighborhood = self.get_biggest_group(player_color.otherColor())
-        their_next_biggest_group, their_next_neighborhood = next_game_state.get_biggest_group(player_color.otherColor())
+        their_next_biggest_group, their_next_neighborhood = (their_current_biggest_group, their_current_neighborhood) if opponents_fishes_did_not_change else next_game_state.get_biggest_group(player_color.otherColor())
         their_group_increase = len(their_next_biggest_group) - len(their_current_biggest_group)
 
         our_current_num_fishes = self.number_of_fishes(player_color)
         our_next_num_fishes = next_game_state.number_of_fishes(player_color)
         their_current_num_fishes = self.number_of_fishes(player_color.otherColor())
-        their_next_num_fishes = next_game_state.number_of_fishes(player_color.otherColor())
+        their_next_num_fishes = their_current_num_fishes if opponents_fishes_did_not_change else next_game_state.number_of_fishes(player_color.otherColor())
 
         # the more fishes are united the closer we are to winning
         our_group_union_fraction = float(len(our_next_biggest_group)) / our_next_num_fishes
@@ -186,9 +186,45 @@ class GameState():
         distance_reward = their_distance_increase - our_distance_increase
         group_increase_reward = our_group_increase - their_group_increase
 
+
+        win_lose_reward = 0
+
+        # if opponent has already all fishes united and our move does
+        # not eat one of his junction fishes (fishes which, if eaten, split the group into two)
+        # -> give negative reward -30.0
+        if len(their_current_biggest_group) >= their_current_num_fishes:
+            if len(our_current_biggest_group) >= our_current_num_fishes:
+                pass
+
+        # if we have already all fishes united and the opponents Move
+        # does not eat one of our junction fishes
+        # -> give positive reward +30.0
+
+        # if throught the opponent has only one group left
+        # -> dont
+        '''
+        if len(their_next_biggest_group) >= their_next_num_fishes:
+            if len(our_next_biggest_group) >= our_next_num_fishes and our_next_num_fishes > their_next_num_fishes:
+                # everything's fine
+                win_lose_reward = 100.0
+            else:
+                win_lose_reward = -100.0
+        '''
+        # if we are not the start player and we can union all fishes this turn
+        # -> do it
+        print(our_next_num_fishes, len(our_next_biggest_group), our_next_biggest_group)
+        if len(our_next_biggest_group) >= our_next_num_fishes:
+            if opponent_did_move or player_color != GameSettings.startPlayerColor:
+                # the opponent has no chance to change anything anymore
+                win_lose_reward = 100.0
+            else:
+                # the opponent has a chance to change something so don't be so sure
+                win_lose_reward += 30.0
+
+        # TODO give reward if we isolate fish
         # TODO rewards for swarm disrupted, Strafe for fish eaten, look at opponent's reward
         return (
-            group_reward + distance_reward + group_increase_reward,
+            group_reward + distance_reward + group_increase_reward + win_lose_reward,
             next_game_state.turn >= 60,
             next_game_state
         )

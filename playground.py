@@ -3,257 +3,113 @@
 from core.util import Direction, Move, PlayerColor, FieldState
 from core.state import GameSettings, GameState
 import numpy as np
-
+from time import time
 GameSettings.ourColor = PlayerColor.RED
+GameSettings.startPlayerColor = PlayerColor.RED
 state = GameState()
 
 a = np.full((10, 10), FieldState.EMPTY)
-a[1:-1, 0] = FieldState.RED
-a[1:-1,-1] = FieldState.RED
-a[0, 1:-1] = FieldState.BLUE
-a[-1,1:-1] = FieldState.BLUE
+a[6, 2:7] = FieldState.RED
+a[5, 7] = FieldState.RED
 
-a[4, 6] = FieldState.OBSTRUCTED
-a[7, 3] = FieldState.OBSTRUCTED
+a[5, 2] = FieldState.BLUE
+a[4,1:6] = FieldState.BLUE
+
+a[4, 5] = FieldState.OBSTRUCTED
+a[6, 4] = FieldState.OBSTRUCTED
 a[4, 3] = FieldState.RED
+a[5, 3] = FieldState.RED
+a[7, 6] = FieldState.RED
+a[9, 5] = FieldState.RED
 
-
+state.currentPlayerColor = PlayerColor.RED
+state.turn = 56
 state.board = a
-#state.printColored()
-#print(state.board)
 
-#state.board = np.rot90(state.board)
 state.printColored()
-#print(state.board)
 
-def neighbors(x, y, boolBoard):
+start_time = time()
 
+our_fishes = state.get_fishes(GameSettings.ourColor)
 
-    xmin = max(0, x-1)
-    xmax = min(x+2, boolBoard.shape[0])
-    ymin = max(0, y-1)
-    ymax = min(y+2, boolBoard.shape[1])
+estimated_rewards = {}  # dict of (move, reward)
+for our_fish in our_fishes:
+    for our_dir in Direction:
+        our_move = Move(our_fish[0], our_fish[1], our_dir)
+        # game_state = self.currentGameState.apply(our_move)
+        reward, done, game_state = state.estimate_reward(our_move, opponent_did_move=False)
+        if game_state is None:
+            # this move was invalid
+            continue
 
-    neighborhood = boolBoard[xmin:xmax, ymin:ymax]
-    #print('umfeld')
-    #print(neighborhood)
+        estimated_rewards[our_move] = (reward, done, game_state)
 
-    neighbors = np.argwhere(neighborhood)
+estimated_rewards_sorted = sorted(estimated_rewards.items(), key=lambda x: -x[1][0])
 
-    neighbors += np.array([xmin, ymin])
+estimated_rewards_opponent = {}
+time_exceeded = False
+for move, (reward, done, game_state) in estimated_rewards_sorted:
+    possible_rewards = []
+    their_fishes = game_state.get_fishes(GameSettings.ourColor.otherColor())
+    for their_fish in their_fishes:
+        for their_dir in Direction:
+            their_move = Move(their_fish[0], their_fish[1], their_dir)
+            next_game_state = game_state.apply(their_move)
+            if next_game_state is None:
+                # this move was invalid
+                continue
 
+            reward, done, _ = state.estimate_reward(next_game_state)
+            possible_rewards.append(reward)
 
-    return neighbors
+            if time() - start_time > 1.4:
+                time_exceeded = True
+                break
+        if time_exceeded:
+            break
+    if time_exceeded:
+        break
 
-def findGroups(playerColor, board):
-    boolBoard = (board == FieldState.fromPlayerColor(playerColor))
-    fishesToConsider = np.argwhere(boolBoard)
-    groups = []
+    possible_rewards = np.array(possible_rewards)
+    estimated_rewards_opponent[move] = (possible_rewards.mean(), possible_rewards.max(), possible_rewards.min())
 
-    # calculate group for each starting position
-    while len(fishesToConsider) > 0:
-        fish = fishesToConsider[0]
+if len(estimated_rewards_opponent) >= 3:
+    estimated_rewards = estimated_rewards_opponent
+else:
+    for move in estimated_rewards:
+        reward = estimated_rewards[move][0]
+        estimated_rewards[move] = (reward, reward, reward)
 
-        # get neighborhood of chosen fish and iteratively do a flood-fill
-        fish_neighborhood = neighbors(fish[0], fish[1], boolBoard)
-        i = 0
-        while i < len(fish_neighborhood):
-            neighbor = fish_neighborhood[i]
+worst_case_move = None
+highest_worst_case_reward = None
 
-            its_neighborhood = neighbors(neighbor[0], neighbor[1], boolBoard)
-            concatenated = np.concatenate((fish_neighborhood, its_neighborhood))
-            fish_neighborhood = np.unique(concatenated, axis=0)
-            i += 1
+best_case_move = None
+highest_best_case_reward = None
 
-        groups.append(fish_neighborhood)
+typical_move = None
+highest_typical_reward = None
+for move, (typical_reward, best_case_reward, worst_case_reward) in estimated_rewards.items():
 
-        # remove all fishes in this group from the fishes to consider next round
-        remainingMask = ~(np.isin(list(map(lambda a: a[0] * 10 + a[1], fishesToConsider)), list(map(lambda a: a[0] * 10 + a[1], fish_neighborhood))))
-        fishesToConsider = fishesToConsider[remainingMask]
+    if highest_typical_reward is None or typical_reward > highest_typical_reward:
+        typical_move = move
+        highest_typical_reward = typical_reward
 
-    return groups
+    if highest_best_case_reward is None or best_case_reward > highest_best_case_reward:
+        best_case_move = move
+        highest_best_case_reward = best_case_reward
 
+    if highest_worst_case_reward is None or worst_case_reward > highest_worst_case_reward:
+        worst_case_move = move
+        highest_worst_case_reward = worst_case_reward
 
-
-def findLargestGroup(playerColor, board):
-
-    groups = findGroups(playerColor, board)
-    largestGroup = None
-    largestSize = 0
-    for group in groups:
-        size = len(group)
-        if largestSize < size:
-            largestSize = size
-            largestGroup = group
-
-    return largestGroup
-'''
-group = findLargestGroup(GameSettings.ourColor, state.board)
-state.printColored(highlight=group)
-'''
-
-def validate_move(move, gameState=None, debug=False):
-    '''
-        Returns a tuple:
-        1. flag, if move is valid
-        2. destination (x, y) of that move or None if invalid
-    '''
-
-    if not isinstance(move, Move):
-        raise ValueError('move argument is not of type "Move". Given: ' + str(type(move)))
-
-    if gameState is None:
-        raise ValueError('gameState argument is None')
-    elif not isinstance(gameState, GameState):
-        raise ValueError('gameState argument is not of type "GameState". Given: ' + str(type(gameState)))
-
-    if gameState is None:
-        raise ValueError('No gameState found.')
-    elif gameState.board is None:
-        raise ValueError('No board found.')
-
-    board = gameState.board
-
-    '''
-        check if this move is valid
-
-        1. a fish of ours is selected
-        2. the fish can move in that direction (not directly next to the bounds)
-        3. destination is empty or opponent's fish (not ours and not a kraken)
-        4. our fish does not jump over a opponent's fish
-    '''
-
-    ourFishFieldState = FieldState.fromPlayerColor(GameSettings.ourColor)
-
-    if not (board[move.x, move.y] == ourFishFieldState):
-        if debug:
-            print('Can\'t mind control the opponents fishes :(')
-        return False, None
-
-    # count fishes in that row
-    #
-    # on which axis are we and
-    # on that axis - where are we exactly?
-    axis = None
-    current_position_on_axis = None
-    if move.direction == Direction.UP or move.direction == Direction.DOWN:
-        axis = board[move.x]
-        current_position_on_axis = move.y
-    elif move.direction == Direction.LEFT or move.direction == Direction.RIGHT:
-        axis = board[:, move.y]
-        current_position_on_axis = move.x
-    elif move.direction == Direction.DOWN_LEFT or move.direction == Direction.UP_RIGHT:
-        axis = board.diagonal(move.y - move.x)
-        current_position_on_axis = move.x if move.y > move.x else move.y
-    elif move.direction == Direction.UP_LEFT or move.direction == Direction.DOWN_RIGHT:
-        flippedX = ((board.shape[0] - 1) - move.x)
-
-        # NOTE: flipud actually flips the board left to right because of the way how we index it
-        axis = np.flipud(board).diagonal(move.y - flippedX)
-
-        current_position_on_axis = flippedX if move.y > flippedX else move.y
-
-    if debug:
-        print('move', move.direction.name, (move.x, move.y), '-> axis: [ ', end='')
-        for item in axis:
-            print(item.name, end=' ')
-        print('], idx:', current_position_on_axis)
-
-    num_fishes = ((axis == FieldState.RED) | (axis == FieldState.BLUE)).sum()
-    if debug:
-        print('-> fishlis:', num_fishes)
-
-    #  where do we wanna go?
-    #  NOTE: y is upside down / inverted
-    direction_forward = (move.direction in [Direction.UP, Direction.UP_LEFT, Direction.UP_RIGHT, Direction.RIGHT])
-    destination_position_on_axis = (current_position_on_axis + num_fishes) if direction_forward else (current_position_on_axis - num_fishes)
-    if debug:
-        print('direction_forward:', direction_forward)
-        print('destination:', destination_position_on_axis)
-
-    # check for bounds
-    if destination_position_on_axis < 0 or destination_position_on_axis >= axis.size:
-        if debug:
-            print('Exceeding bounds. %d of %d' % (destination_position_on_axis, axis.size))
-        return False, None
-
-    # what type is that destination field?
-    destinationFieldState = axis[destination_position_on_axis]
-    if destinationFieldState == FieldState.OBSTRUCTED or destinationFieldState == ourFishFieldState:
-        if debug:
-            print('Destination is obstructed or own fish:', destinationFieldState)
-        return False, None
-
-    # is an opponents fish in between(! excluding the destiantion !)?
-    opponentsFieldState = FieldState.RED if ourFishFieldState == FieldState.BLUE else FieldState.BLUE
-    for idx in range(current_position_on_axis, destination_position_on_axis, 1 if direction_forward else -1):
-        if axis[idx] == opponentsFieldState:
-            if debug:
-                print('Can\'t jump over opponents fish.')
-            return False, None
-
-
-    dest_x, dest_y = move.x, move.y
-    if move.direction == Direction.UP or move.direction == Direction.DOWN:
-        dest_y = destination_position_on_axis
-    elif move.direction == Direction.LEFT or move.direction == Direction.RIGHT:
-        dest_x = destination_position_on_axis
-    elif move.direction == Direction.DOWN_LEFT or move.direction == Direction.UP_RIGHT:
-        dest_x += num_fishes * (1 if direction_forward else -1)
-        dest_y += num_fishes * (1 if direction_forward else -1)
-    elif move.direction == Direction.UP_LEFT or move.direction == Direction.DOWN_RIGHT:
-        dest_x -= num_fishes * (1 if direction_forward else -1)
-        dest_y += num_fishes * (1 if direction_forward else -1)
-
-    return True, (dest_x, dest_y)
-'''
-import time
-startTime = time.time()
-
-possible_moves = np.zeros((10 * 10 * (8 + 2)), dtype=np.bool)
-positions = np.argwhere(state.board == FieldState.fromPlayerColor(GameSettings.ourColor))
-
-dir_enumerated = list(enumerate(Direction))
-for x, y in positions:
-    for i, dir in dir_enumerated:
-        move = Move(x, y, dir)
-        idx = (x + (y * 10)) * 8 + i
-        assert(idx < 800)
-        possible_moves[idx] = validate_move(move, state)[0]
-
-possible_moves[-200:-100] = (state.board == FieldState.fromPlayerColor(GameSettings.ourColor.otherColor())).flatten()
-possible_moves[-100:] = (state.board == FieldState.OBSTRUCTED).flatten()
-
-endTime = time.time()
-
-print((endTime - startTime) * 1000, 'ms')
-for i in range(0, 1000, 100):
-    print(possible_moves[i:i+100])
-'''
-move = Move(4, 3, Direction.UP_LEFT)
-
-import pickle
-
-def load_data(filepath, debug=False):
-    if debug:
-        print('Loading data from {}'.format(filepath))
-    with open(filepath, 'rb') as file:
-        data = pickle.load(file)
-        if debug:
-            print('Loaded data from {}'.format(filepath))
-        return data
-
-def store_data(data, filepath):
-    if debug:
-        print('Storing data in {}'.format(filepath))
-    with open(filepath, 'wb') as file:
-        pickle.dump(data, file)
-        if debug:
-            print('Stored data in {}'.format(filepath))
-
-FILEPATH_STATE = './pickled_state.data'
-FILEPATH_MOVE = './pickled_move.data'
-store_data(state, FILEPATH_STATE)
-store_data(move, FILEPATH_MOVE)
-
-load_data(FILEPATH_STATE).apply(load_data(FILEPATH_MOVE)).printColored()
+print(
+'''[env] Sending move after {:.3f} seconds. Expected Reward:
+    Typical:    {:10.2f} {}
+    Best Case:  {:10.2f} {}
+    Worst Case: {:10.2f} {}
+'''.format(
+    time()-start_time,
+    highest_typical_reward, typical_move,
+    highest_best_case_reward, best_case_move,
+    highest_worst_case_reward, worst_case_move
+))
