@@ -7,7 +7,6 @@ from ..util import PlayerColor, FieldState
 
 LOG_COUNT = 0
 
-
 class Parser():
 
     @staticmethod
@@ -17,24 +16,14 @@ class Parser():
         if xml_string == '':
             return False
 
-        """xml_string = <room roomId="874850fa-7b9e-4f95-b3e1-fac2991a0f55">
-        <data class="memento">
-          <state class="sc.plugin2019.GameState" startPlayerColor="RED" currentPlayerColor="BLUE" turn="1">
-            <lastMove class="move" x="9" y="7" direction="UP_LEFT">
-              <hint content="noch ein Hint"/>
-            </lastMove>
-            <red displayName="Unknown" color="RED"/>
-            <blue displayName="Unknown" color="BLUE"/>
-            <board>
-              <fields>"""
         soup = BeautifulSoup('<root>' + xml_string + '</root>', 'xml')
 
-        last_opened_tag = soup.root.contents[-1].name
-        if last_opened_tag == 'protocol':
-            last_opened_tag = soup.root.protocol.contents[-1].name
+        last_opened_tag = soup.root.contents[-1]
+        if last_opened_tag.name == 'protocol':
+            last_opened_tag = soup.root.protocol.contents[-1]
 
-        expected_closing_tag = "</" + last_opened_tag + ">"
-        return xml_string.endswith(expected_closing_tag)
+        expected_closing_seq = '/>' if last_opened_tag.is_empty_element else '</' + last_opened_tag.name + '>'
+        return xml_string.endswith(expected_closing_seq) or xml_string.endswith('</protocol>')
 
     @staticmethod
     def parse(xml_string, lastGameState=None, debug=False):

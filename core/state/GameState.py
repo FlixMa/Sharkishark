@@ -4,24 +4,34 @@ import numpy as np
 from enum import Enum
 
 class GameState():
-    def __init__(self):
+    def __init__(self, disable_cache=False):
         self.currentPlayerColor = None
         self.turn = None
         self.board = None
 
+        self.bool_board = {}
         self.fishes = {}
         self.mean_distance = {}
         self.num_fishes = {}
         self.groups = {}
         self.biggest_group = {}
 
+        self.disable_cache = disable_cache
+
+
+    def get_bool_board(self, player_color):
+        if self.disable_cache or player_color not in self.bool_board:
+            self.bool_board[player_color] = (self.board == FieldState.fromPlayerColor(player_color))
+
+        return self.bool_board[player_color]
+
     def get_fishes(self, player_color):
-        if player_color not in self.fishes:
-            self.fishes[player_color] = np.argwhere(self.board == FieldState.fromPlayerColor(player_color))
+        if self.disable_cache or player_color not in self.fishes:
+            self.fishes[player_color] = np.argwhere(self.get_bool_board(player_color))
         return self.fishes[player_color]
 
     def calc_mean_distance_using_median_center(self, player_color):
-        if player_color not in self.mean_distance:
+        if self.disable_cache or player_color not in self.mean_distance:
             fishes = self.get_fishes(player_color)
             median_coordinate = np.percentile(
                 fishes,
@@ -46,9 +56,9 @@ class GameState():
         '''
 
         # check if this has already been calculated
-        if player_color not in self.groups:
-            boolBoard = self.get_fishes(player_color)
-            fishesToConsider = np.argwhere(boolBoard)
+        if self.disable_cache or player_color not in self.groups:
+            boolBoard = self.get_bool_board(player_color)
+            fishesToConsider = self.get_fishes(player_color)
             groups = []
 
             # calculate group for each starting position
@@ -79,19 +89,19 @@ class GameState():
         return self.groups[player_color]
 
     def get_biggest_group(self, player_color):
-        if player_color in self.biggest_group:
-            return self.biggest_group[player_color]
-        groups = self.find_groups(player_color)
-        largestGroup = None
-        largestSize = 0
-        for group, neighborhood in groups:
-            size = len(group)
-            if largestSize < size:
-                largestSize = size
-                largestGroup = (group, neighborhood)
+        if self.disable_cache or player_color not in self.biggest_group:
+            groups = self.find_groups(player_color)
+            largestGroup = None
+            largestSize = 0
+            for group, neighborhood in groups:
+                size = len(group)
+                if largestSize < size:
+                    largestSize = size
+                    largestGroup = (group, neighborhood)
 
-        self.biggest_group[player_color] = largestGroup
-        return largestGroup
+            self.biggest_group[player_color] = largestGroup
+
+        return self.biggest_group[player_color]
 
     def apply(self, move, debug=False):
         assert(self.currentPlayerColor is not None)
@@ -114,7 +124,7 @@ class GameState():
         return next_game_state
 
     def number_of_fishes(self, player_color):
-        if player_color not in self.num_fishes:
+        if self.disable_cache or player_color not in self.num_fishes:
             self.num_fishes[player_color] = len(self.get_fishes(player_color))
         return self.num_fishes[player_color]
 
@@ -212,7 +222,6 @@ class GameState():
         '''
         # if we are not the start player and we can union all fishes this turn
         # -> do it
-        print(our_next_num_fishes, len(our_next_biggest_group), our_next_biggest_group)
         if len(our_next_biggest_group) >= our_next_num_fishes:
             if opponent_did_move or player_color != GameSettings.startPlayerColor:
                 # the opponent has no chance to change anything anymore
@@ -223,8 +232,20 @@ class GameState():
 
         # TODO give reward if we isolate fish
         # TODO rewards for swarm disrupted, Strafe for fish eaten, look at opponent's reward
+
+        total_reward = group_reward + distance_reward + group_increase_reward + win_lose_reward
+        #print('''Reward for:
+        #    group:          {:6.1f}
+        #    group increase: {:6.1f}
+        #    distance:       {:6.1f}
+        #    win_lose:       {:6.1f}
+        #    ---------------------------
+        #    total:          {:6.1f}
+        #'''.format(group_reward, distance_reward, group_increase_reward,  win_lose_reward, total_reward))
+
+
         return (
-            group_reward + distance_reward + group_increase_reward + win_lose_reward,
+            total_reward,
             next_game_state.turn >= 60,
             next_game_state
         )
