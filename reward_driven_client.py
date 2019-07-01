@@ -130,16 +130,16 @@ class RewardDrivenClient(GameLogicDelegate):
 
         print(
         '''[env] Sending move after {:.3f} seconds. Expected Reward:
-         -> Typical:    {:10.2f} {}
+            Typical:    {:10.2f} {}
             Best Case:  {:10.2f} {}
-            Worst Case: {:10.2f} {}
+         -> Worst Case: {:10.2f} {}
         '''.format(
             time()-start_time,
             highest_typical_reward, typical_move,
             highest_best_case_reward, best_case_move,
             highest_worst_case_reward, worst_case_move
         ))
-        return typical_move
+        return worst_case_move
 
     def onGameResult(self, result, cause, description):
         print("[env] Received gameResult '({}, {})'".format(result, cause))

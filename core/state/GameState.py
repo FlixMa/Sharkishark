@@ -183,9 +183,15 @@ class GameState():
         their_next_num_fishes = their_current_num_fishes if opponents_fishes_did_not_change else next_game_state.number_of_fishes(player_color.otherColor())
 
         # the more fishes are united the closer we are to winning
-        our_group_union_fraction = float(len(our_next_biggest_group)) / our_next_num_fishes
-        their_group_union_fraction = float(len(their_next_biggest_group)) / their_next_num_fishes
-        group_is_swarmier_reward = (10.0 if our_group_union_fraction > their_group_union_fraction else -10.0)
+        our_group_union_fraction = our_next_num_fishes - len(our_next_biggest_group)
+        their_group_union_fraction = their_next_num_fishes - len(their_next_biggest_group)
+        group_is_swarmier_reward = 0
+
+        if our_group_union_fraction > their_group_union_fraction:
+            group_is_swarmier_reward = 10.0
+        elif our_group_union_fraction < their_group_union_fraction:
+            group_is_swarmier_reward = -10.0
+
 
         # if its getting to a draw situation, its just necessary to have more fishes unioned than the other player
         group_has_more_fishes_reward = (10.0 if len(our_next_biggest_group) > len(their_next_biggest_group) else -10.0)
@@ -207,7 +213,7 @@ class GameState():
         # -> give positive reward +30.0
         # were_unioned = len(our_current_biggest_group) >= our_current_num_fishes -> cant happen otherwise we would have won
         theyre_unioned = len(their_current_biggest_group) >= their_current_num_fishes
-        were_unioning = len(their_next_biggest_group) >= their_next_num_fishes
+        were_unioning = len(our_next_biggest_group) >= our_next_num_fishes
         theyre_unioning = len(their_next_biggest_group) >= their_next_num_fishes
 
         this_could_be_the_final_move = opponent_did_move or player_color != GameSettings.startPlayerColor
